@@ -167,12 +167,13 @@ RC Db::drop_table(const char *table_name)
       return rc;
     }
 
-    // attempt to close associated data file in buffer pool manager
-    string data_file = table_data_file(path_.c_str(), table_name);
-    buffer_pool_manager_->close_file(data_file.c_str());
-
+    // delete table first so its engine can close associated resources
     delete table;
     opened_tables_.erase(iter);
+
+    // now close and remove buffer pool entry for data file (object should be closed by engine)
+    string data_file = table_data_file(path_.c_str(), table_name);
+    buffer_pool_manager_->close_file(data_file.c_str());
   }
 
   // remove meta, data, lob files
