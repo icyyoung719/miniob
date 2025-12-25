@@ -306,8 +306,6 @@ RC DiskBufferPool::close_file()
   }
   LOG_INFO("Successfully close file %d:%s.", file_desc_, file_name_.c_str());
   file_desc_ = -1;
-
-  bp_manager_.close_file(file_name_.c_str());
   return RC::SUCCESS;
 }
 
