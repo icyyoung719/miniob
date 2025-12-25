@@ -150,6 +150,55 @@ RC Db::init(const char *name, const char *dbpath, const char *trx_kit_name, cons
   return rc;
 }
 
+RC Db::drop_table(const char *table_name)
+{
+  if (common::is_blank(table_name)) {
+    LOG_WARN("Invalid table name");
+    return RC::INVALID_ARGUMENT;
+  }
+
+  // If table is opened, remove it from opened_tables_ and delete the object
+  auto iter = opened_tables_.find(table_name);
+  if (iter != opened_tables_.end()) {
+    Table *table = iter->second;
+    RC rc = table->sync();
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("Failed to sync table before drop. table=%s, rc=%d", table_name, rc);
+      return rc;
+    }
+
+    // attempt to close associated data file in buffer pool manager
+    string data_file = table_data_file(path_.c_str(), table_name);
+    buffer_pool_manager_->close_file(data_file.c_str());
+
+    delete table;
+    opened_tables_.erase(iter);
+  }
+
+  // remove meta, data, lob files
+  error_code ec;
+  string meta_file = table_meta_file(path_.c_str(), table_name);
+  filesystem::remove(meta_file, ec);
+  string data_file = table_data_file(path_.c_str(), table_name);
+  filesystem::remove(data_file, ec);
+  string lob_file = table_lob_file(path_.c_str(), table_name);
+  filesystem::remove(lob_file, ec);
+
+  // remove index files: pattern <table>-<index>.index
+  vector<string> index_files;
+  string pattern = string(table_name) + "-.*\\.index$";
+  int ret = list_file(path_.c_str(), pattern.c_str(), index_files);
+  if (ret >= 0) {
+    for (const string &f : index_files) {
+      filesystem::path p = filesystem::path(path_) / f;
+      filesystem::remove(p, ec);
+    }
+  }
+
+  LOG_INFO("Drop table success. table name=%s", table_name);
+  return RC::SUCCESS;
+}
+
 RC Db::create_table(const char *table_name, span<const AttrInfoSqlNode> attributes, const vector<string>& primary_keys, const StorageFormat storage_format)
 {
   RC rc = RC::SUCCESS;
