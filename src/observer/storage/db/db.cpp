@@ -175,10 +175,15 @@ RC Db::drop_table(const char *table_name)
     string data_file = table_data_file(path_.c_str(), table_name);
     buffer_pool_manager_->close_file(data_file.c_str());
   }
+  // If table is neither opened nor has meta file, consider it not exist
+  string meta_file = table_meta_file(path_.c_str(), table_name);
+  if (iter == opened_tables_.end() && !filesystem::exists(meta_file)) {
+    LOG_WARN("Drop table failed, table not exist: %s", table_name);
+    return RC::SCHEMA_TABLE_NOT_EXIST;
+  }
 
   // remove meta, data, lob files
   error_code ec;
-  string meta_file = table_meta_file(path_.c_str(), table_name);
   filesystem::remove(meta_file, ec);
   string data_file = table_data_file(path_.c_str(), table_name);
   filesystem::remove(data_file, ec);
