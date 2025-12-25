@@ -28,7 +28,7 @@ class UpdateStmt : public Stmt
 public:
   UpdateStmt() = default;
   UpdateStmt(Table *table, Value *values, int value_amount);
-  ~UpdateStmt() { if (values_) delete[] values_; }
+  ~UpdateStmt() { if (values_) delete values_; }
 
 public:
   static RC create(Db *db, const UpdateSqlNode &update_sql, Stmt *&stmt);
