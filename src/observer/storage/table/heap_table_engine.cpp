@@ -103,6 +103,45 @@ RC HeapTableEngine::delete_record(const Record &record)
   return rc;
 }
 
+RC HeapTableEngine::insert_record_with_trx(Record &record, Trx *trx)
+{
+  (void)trx;
+  return insert_record(record);
+}
+
+RC HeapTableEngine::delete_record_with_trx(const Record &record, Trx *trx)
+{
+  (void)trx;
+  return delete_record(record);
+}
+
+RC HeapTableEngine::update_record_with_trx(const Record &old_record, const Record &new_record, Trx *trx)
+{
+  (void)trx;
+  // update indexes: delete old entries then insert new entries
+  RC rc = RC::SUCCESS;
+  rc = delete_entry_of_indexes(old_record.data(), old_record.rid(), false /*error_on_not_exists*/);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  rc = insert_entry_of_indexes(new_record.data(), new_record.rid());
+  if (rc != RC::SUCCESS) {
+    // rollback index changes attempt: re-insert old entries
+    (void)insert_entry_of_indexes(old_record.data(), old_record.rid());
+    return rc;
+  }
+
+  // update the record data in-place using visit_record helper
+  rc = record_handler_->visit_record(old_record.rid(), [&](Record &record) {
+    RC rc2 = record.copy_data(new_record.data(), new_record.len());
+    if (rc2 != RC::SUCCESS) {
+      return false;
+    }
+    return true;
+  });
+  return rc;
+}
+
 RC HeapTableEngine::get_record_scanner(RecordScanner *&scanner, Trx *trx, ReadWriteMode mode)
 {
   scanner = new HeapRecordScanner(table_, *data_buffer_pool_, trx, db_->log_handler(), mode, nullptr);
