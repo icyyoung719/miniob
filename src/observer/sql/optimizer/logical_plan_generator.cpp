@@ -159,7 +159,12 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
 
 RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<LogicalOperator> &logical_operator)
 {
-  RC                                  rc = RC::SUCCESS;
+  RC rc = RC::SUCCESS;
+  if (filter_stmt == nullptr) {
+    logical_operator = nullptr;
+    // 没有过滤条件，或条件不合法，如 一个不存在的字段
+    return RC::INVALID_ARGUMENT;
+  }
   vector<unique_ptr<Expression>> cmp_exprs;
   const vector<FilterUnit *>    &filter_units = filter_stmt->filter_units();
   for (const FilterUnit *filter_unit : filter_units) {
@@ -283,6 +288,7 @@ RC LogicalPlanGenerator::create_plan(UpdateStmt *update_stmt, unique_ptr<Logical
   RC rc = create_plan(update_stmt->filter_stmt(), predicate_oper);
   if (rc != RC::SUCCESS) {
     LOG_WARN("failed to create predicate logical plan for update. rc=%s", strrc(rc));
+    return rc;
     // continue without predicate
   }
 
