@@ -572,8 +572,22 @@ expression:
     ;
 
 aggregate_expression:
-    ID LBRACE expression RBRACE {
-      $$ = create_aggregate_expression($1, $3, sql_string, &@$);
+    ID LBRACE expression_list RBRACE {
+      if ($3 != nullptr) {
+        if ($3->size() == 1) {
+          Expression *child = $3->at(0).release();
+          $$ = create_aggregate_expression($1, child, sql_string, &@$);
+        } else {
+          ConjunctionExpr *conj = new ConjunctionExpr(ConjunctionExpr::Type::AND, *$3);
+          $$ = create_aggregate_expression($1, conj, sql_string, &@$);
+        }
+        delete $3;
+      } else {
+        $$ = create_aggregate_expression($1, nullptr, sql_string, &@$);
+      }
+    }
+    | ID LBRACE RBRACE {
+      $$ = create_aggregate_expression($1, nullptr, sql_string, &@$);
     }
     ;
 

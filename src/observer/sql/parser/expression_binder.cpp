@@ -417,6 +417,10 @@ RC ExpressionBinder::bind_aggregate_expression(
 
   unique_ptr<Expression>        &child_expr = unbound_aggregate_expr->child();
   vector<unique_ptr<Expression>> child_bound_expressions;
+  if (child_expr == nullptr) {
+    LOG_WARN("aggregate function '%s' missing argument", aggregate_name);
+    return RC::INVALID_ARGUMENT;
+  }
 
   if (child_expr->type() == ExprType::STAR && aggregate_type == AggregateExpr::Type::COUNT) {
     ValueExpr *value_expr = new ValueExpr(Value(1));
@@ -436,6 +440,11 @@ RC ExpressionBinder::bind_aggregate_expression(
       child_expr.reset(child_bound_expressions[0].release());
     }
   }
+
+    if (child_expr->type() == ExprType::CONJUNCTION) {
+      LOG_WARN("aggregate function '%s' has multiple arguments", aggregate_name);
+      return RC::INVALID_ARGUMENT;
+    }
 
   auto aggregate_expr = make_unique<AggregateExpr>(aggregate_type, std::move(child_expr));
   aggregate_expr->set_name(unbound_aggregate_expr->name());
