@@ -275,8 +275,25 @@ RC LogicalPlanGenerator::create_plan(UpdateStmt *update_stmt, unique_ptr<Logical
 {
   Table *table = update_stmt->table();
   Value  val = *update_stmt->values();
-  UpdateLogicalOperator *op = new UpdateLogicalOperator(table, update_stmt->value_field(), val);
-  logical_operator.reset(op);
+  UpdateLogicalOperator *update_oper = new UpdateLogicalOperator(table, update_stmt->value_field(), val);
+
+  unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, ReadWriteMode::READ_WRITE));
+  unique_ptr<LogicalOperator> predicate_oper;
+
+  RC rc = create_plan(update_stmt->filter_stmt(), predicate_oper);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to create predicate logical plan for update. rc=%s", strrc(rc));
+    // continue without predicate
+  }
+
+  if (predicate_oper) {
+    predicate_oper->add_child(std::move(table_get_oper));
+    update_oper->add_child(std::move(predicate_oper));
+  } else {
+    update_oper->add_child(std::move(table_get_oper));
+  }
+
+  logical_operator.reset(update_oper);
   return RC::SUCCESS;
 }
 

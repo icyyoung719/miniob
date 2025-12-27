@@ -18,6 +18,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/stmt.h"
 
 class Table;
+class FilterStmt;
 
 /**
  * @brief 更新语句
@@ -28,10 +29,12 @@ class UpdateStmt : public Stmt
 public:
   UpdateStmt() = default;
   UpdateStmt(Table *table, Value *values, int value_amount);
-  ~UpdateStmt() { if (values_) delete values_; }
+  ~UpdateStmt();
 
 public:
   static RC create(Db *db, const UpdateSqlNode &update_sql, Stmt *&stmt);
+
+  FilterStmt *filter_stmt() const { return filter_stmt_; }
 
 public:
   Table *table() const { return table_; }
@@ -45,4 +48,5 @@ private:
   Value *values_       = nullptr;
   int    value_amount_ = 0;
   string value_field_;
+  FilterStmt *filter_stmt_ = nullptr;
 };

@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/update_stmt.h"
 
 #include "common/log/log.h"
+#include "sql/stmt/filter_stmt.h"
 #include "storage/db/db.h"
 #include "storage/table/table.h"
 
@@ -47,6 +48,31 @@ RC UpdateStmt::create(Db *db, const UpdateSqlNode &update, Stmt *&stmt)
   Value *val = new Value(update.value);
   UpdateStmt *u = new UpdateStmt(table, val, 1);
   u->value_field_ = update.attribute_name;
+  // create filter stmt from update conditions
+  unordered_map<string, Table *> table_map;
+  table_map.insert(pair<string, Table *>(string(table_name), table));
+
+  FilterStmt *filter_stmt = nullptr;
+  RC rc = FilterStmt::create(db, table, &table_map, update.conditions.data(), static_cast<int>(update.conditions.size()), filter_stmt);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to create filter statement for update. rc=%d:%s", rc, strrc(rc));
+    // still return the update stmt without filter if no conditions
+  } else {
+    u->filter_stmt_ = filter_stmt;
+  }
+
   stmt = u;
   return RC::SUCCESS;
+}
+
+UpdateStmt::~UpdateStmt()
+{
+  if (values_) {
+    delete values_;
+    values_ = nullptr;
+  }
+  if (filter_stmt_) {
+    delete filter_stmt_;
+    filter_stmt_ = nullptr;
+  }
 }

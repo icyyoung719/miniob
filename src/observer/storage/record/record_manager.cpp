@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 #include "storage/common/condition_filter.h"
 #include "storage/trx/trx.h"
 #include "storage/clog/log_handler.h"
+#include <algorithm>
 
 using namespace common;
 
@@ -727,7 +728,22 @@ RC RecordFileHandler::visit_record(const RID &rid, function<bool(Record &)> upda
 
   bool updated = updater(record);
   if (updated) {
-    rc = page_handler->update_record(rid, record.data());
+    // ensure we don't read beyond the source buffer when writing back to page
+    int page_rec_size = page_handler->record_real_size();
+    if (record.len() == page_rec_size) {
+      rc = page_handler->update_record(rid, record.data());
+    } else {
+      // pad to expected size to avoid OOB read from record.data()
+      char *tmp = (char *)malloc(page_rec_size);
+      if (tmp == nullptr) {
+        LOG_ERROR("failed to allocate temp buffer for update_record. size=%d", page_rec_size);
+        return RC::NOMEM;
+      }
+      memset(tmp, 0, page_rec_size);
+      memcpy(tmp, record.data(), std::min(record.len(), page_rec_size));
+      rc = page_handler->update_record(rid, tmp);
+      free(tmp);
+    }
   }
   return rc;
 }

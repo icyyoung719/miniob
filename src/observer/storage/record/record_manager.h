@@ -232,6 +232,11 @@ public:
    */
   bool is_full() const;
 
+  /**
+   * @brief 返回当前页中每条记录的实际大小
+   */
+  int record_real_size() const { return page_header_ ? page_header_->record_real_size : 0; }
+
 protected:
   /**
    * @details

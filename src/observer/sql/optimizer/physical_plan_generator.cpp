@@ -285,8 +285,23 @@ RC PhysicalPlanGenerator::create_plan(DeleteLogicalOperator &delete_oper, unique
 RC PhysicalPlanGenerator::create_plan(UpdateLogicalOperator &update_oper, unique_ptr<PhysicalOperator> &oper, Session* session)
 {
   Table *table = update_oper.table();
-  auto phys = new UpdatePhysicalOperator(table, update_oper.attribute_name(), update_oper.value());
+  auto *phys = new UpdatePhysicalOperator(table, update_oper.attribute_name(), update_oper.value());
   oper.reset(phys);
+
+  // If logical update has children (e.g., predicate or table_get), convert and attach them
+  if (!update_oper.children().empty()) {
+    // assume at most one child (predicate or table_get)
+    LogicalOperator *child_logical = update_oper.children().front().get();
+    unique_ptr<PhysicalOperator> child_physical;
+    RC rc = create(*child_logical, child_physical, session);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to create child physical operator for update. rc=%s", strrc(rc));
+      return rc;
+    }
+    if (child_physical) {
+      phys->add_child(std::move(child_physical));
+    }
+  }
   return RC::SUCCESS;
 }
 

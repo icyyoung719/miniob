@@ -97,6 +97,9 @@ RC UpdatePhysicalOperator::open(Trx *trx)
       return rc;
     }
 
+    // First, collect matching records while the child is open (scanner holds page latches).
+    // Copy their data so we can release the child and perform updates without holding read locks.
+    std::vector<Record> candidates;
     while (OB_SUCC(rc = child->next())) {
       Tuple *tuple = child->current_tuple();
       if (nullptr == tuple) {
@@ -105,6 +108,22 @@ RC UpdatePhysicalOperator::open(Trx *trx)
       }
       RowTuple *row_tuple = static_cast<RowTuple *>(tuple);
       Record old_record = row_tuple->record();
+
+      Record copy_rec;
+      RC rc2 = copy_rec.copy_data(old_record.data(), old_record.len());
+      if (rc2 != RC::SUCCESS) {
+        child->close();
+        return rc2;
+      }
+      copy_rec.set_rid(old_record.rid());
+      candidates.push_back(std::move(copy_rec));
+    }
+
+    // Close child to release any page read latches before performing updates.
+    child->close();
+
+    // Now perform updates on the collected records.
+    for (Record &old_record : candidates) {
       Record new_record = old_record;
 
       const FieldMeta *field = table_->table_meta().field(attribute_name_.c_str());
@@ -150,7 +169,6 @@ RC UpdatePhysicalOperator::open(Trx *trx)
       }
     }
 
-    child->close();
     return RC::SUCCESS;
   }
 }
