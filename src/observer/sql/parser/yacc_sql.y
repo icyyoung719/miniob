@@ -76,6 +76,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         CALC
         SELECT
         DESC
+        ASC
         SHOW
         SYNC
         INSERT
@@ -131,6 +132,8 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   AttrInfoSqlNode *                          attr_info;
   Expression *                               expression;
   vector<unique_ptr<Expression>> *           expression_list;
+  OrderByItemSqlNode *                       order_by_item;
+  vector<OrderByItemSqlNode> *               order_by_list;
   vector<Value> *                            value_list;
   vector<vector<Value>> *                    value_rows;
   vector<ConditionSqlNode> *                 condition_list;
@@ -148,6 +151,8 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %destructor { delete $$; } <attr_infos>
 %destructor { delete $$; } <expression>
 %destructor { delete $$; } <expression_list>
+%destructor { delete $$; } <order_by_list>
+%destructor { delete $$; } <order_by_item>
 %destructor { delete $$; } <value_list>
 %destructor { delete $$; } <value_rows>
 %destructor { delete $$; } <condition_list>
@@ -184,7 +189,9 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <expression>          aggregate_expression
 %type <expression_list>     expression_list
 %type <expression_list>     group_by
-%type <expression_list>     order_by
+%type <order_by_list>       order_by
+%type <order_by_list>       order_by_list
+%type <order_by_item>       order_by_item
 %type <cstring>             fields_terminated_by
 %type <cstring>             enclosed_by
 %type <sql_node>            calc_stmt
@@ -769,9 +776,57 @@ order_by:
     {
       $$ = nullptr;
     }
-    | ORDER BY expression_list
+    | ORDER BY order_by_list
     {
       $$ = $3;
+    }
+    ;
+
+order_by_item:
+    expression
+    {
+      $$ = new OrderByItemSqlNode();
+      $$->expr.reset($1);
+      $$->asc = true;
+    }
+    | expression DESC
+    {
+      $$ = new OrderByItemSqlNode();
+      $$->expr.reset($1);
+      $$->asc = false;
+    }
+    | expression ASC
+    {
+      $$ = new OrderByItemSqlNode();
+      $$->expr.reset($1);
+      $$->asc = true;
+    }
+    ;
+
+order_by_list:
+    order_by_item
+    {
+      $$ = new vector<OrderByItemSqlNode>;
+      OrderByItemSqlNode tmp;
+      tmp.expr.reset($1->expr.release());
+      tmp.asc = $1->asc;
+      $$->push_back(std::move(tmp));
+      delete $1;
+    }
+    | order_by_item COMMA order_by_list
+    {
+      // prepend item to existing list by creating a new list
+      vector<OrderByItemSqlNode> *new_list = new vector<OrderByItemSqlNode>;
+      OrderByItemSqlNode tmp;
+      tmp.expr.reset($1->expr.release());
+      tmp.asc = $1->asc;
+      new_list->push_back(std::move(tmp));
+      for (size_t _i = 0; _i < $3->size(); ++_i) {
+        new_list->push_back(std::move((*$3)[_i]));
+      }
+      delete $3;
+      $$ = new_list;
+      delete $1;
     }
     ;
 load_data_stmt:

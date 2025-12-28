@@ -8,7 +8,19 @@
 using namespace std;
 
 OrderByPhysicalOperator::OrderByPhysicalOperator(vector<unique_ptr<Expression>> &&order_by_exprs)
-  : order_by_expressions_(std::move(order_by_exprs)), cursor_(0), cur_tuple_(nullptr)
+  : cursor_(0), cur_tuple_(nullptr)
+{
+  order_by_items_.reserve(order_by_exprs.size());
+  for (auto &e : order_by_exprs) {
+    OrderByItem item;
+    item.expr = std::move(e);
+    item.asc = true;
+    order_by_items_.push_back(std::move(item));
+  }
+}
+
+OrderByPhysicalOperator::OrderByPhysicalOperator(vector<OrderByItem> &&order_by_items)
+  : order_by_items_(std::move(order_by_items)), cursor_(0), cur_tuple_(nullptr)
 {
 }
 
@@ -44,11 +56,14 @@ RC OrderByPhysicalOperator::open(Trx *trx)
     }
 
     // compute sort keys from the original tuple (so FieldExpr can lookup by table/field)
-    for (auto &expr : order_by_expressions_) {
+    for (auto &it : order_by_items_) {
       Value key;
-      RC krc = expr->get_value(*t, key);
-      if (krc != RC::SUCCESS) {
-        // if cannot get key, push a null/empty value so comparisons still work
+      if (it.expr) {
+        RC krc = it.expr->get_value(*t, key);
+        if (krc != RC::SUCCESS) {
+          key.reset();
+        }
+      } else {
         key.reset();
       }
       item.keys.push_back(key);
@@ -58,14 +73,18 @@ RC OrderByPhysicalOperator::open(Trx *trx)
   }
 
   // sort rows by precomputed keys
-  if (!order_by_expressions_.empty()) {
+  if (!order_by_items_.empty()) {
     sort(rows_.begin(), rows_.end(), [&](const RowItem &a, const RowItem &b) {
-      for (size_t i = 0; i < a.keys.size() && i < b.keys.size(); ++i) {
+      for (size_t i = 0; i < a.keys.size() && i < b.keys.size() && i < order_by_items_.size(); ++i) {
         int cmp = a.keys[i].compare(b.keys[i]);
-        if (cmp < 0) {
-          return true;
-        } else if (cmp > 0) {
-          return false;
+        if (cmp == 0) {
+          continue;
+        }
+        // respect ASC/DESC flag
+        if (order_by_items_[i].asc) {
+          return cmp < 0;
+        } else {
+          return cmp > 0;
         }
       }
       return false;

@@ -82,13 +82,22 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
     }
   }
   
-  vector<unique_ptr<Expression>> order_by_expressions;
-  for (unique_ptr<Expression> &expression : select_sql.order_by) {
-    RC rc = expression_binder.bind_expression(expression, order_by_expressions);
+  vector<SelectStmt::OrderByItem> order_by_items;
+  for (auto &item : select_sql.order_by) {
+    vector<unique_ptr<Expression>> tmp;
+    RC rc = expression_binder.bind_expression(item.expr, tmp);
     if (OB_FAIL(rc)) {
       LOG_INFO("bind expression failed. rc=%s", strrc(rc));
       return rc;
     }
+    if (tmp.empty()) {
+      LOG_WARN("bound order by expression empty");
+      return RC::INTERNAL;
+    }
+    SelectStmt::OrderByItem nb;
+    nb.expr = std::move(tmp[0]);
+    nb.asc = item.asc;
+    order_by_items.push_back(std::move(nb));
   }
 
   Table *default_table = nullptr;
@@ -116,7 +125,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
   select_stmt->query_expressions_.swap(bound_expressions);
   select_stmt->filter_stmt_ = filter_stmt;
   select_stmt->group_by_.swap(group_by_expressions);
-  select_stmt->order_by_.swap(order_by_expressions);
+  select_stmt->order_by_.swap(order_by_items);
   stmt                      = select_stmt;
   return RC::SUCCESS;
 }

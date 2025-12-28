@@ -414,12 +414,21 @@ RC LogicalPlanGenerator::create_group_by_plan(SelectStmt *select_stmt, unique_pt
 
 RC LogicalPlanGenerator::create_order_by_plan(SelectStmt *select_stmt, unique_ptr<LogicalOperator> &logical_operator)
 {
-  vector<unique_ptr<Expression>> &order_by_expressions = select_stmt->order_by();
-  if (order_by_expressions.empty()) {
+  auto &order_by_src = select_stmt->order_by();
+  if (order_by_src.empty()) {
     return RC::SUCCESS;
   }
 
-  auto order_by_oper = make_unique<OrderByLogicalOperator>(std::move(order_by_expressions));
+  vector<OrderByLogicalOperator::OrderByItem> items;
+  items.reserve(order_by_src.size());
+  for (auto &it : order_by_src) {
+    OrderByLogicalOperator::OrderByItem nb;
+    nb.expr = std::move(it.expr);
+    nb.asc = it.asc;
+    items.push_back(std::move(nb));
+  }
+
+  auto order_by_oper = make_unique<OrderByLogicalOperator>(std::move(items));
   logical_operator = std::move(order_by_oper);
   return RC::SUCCESS;
 }

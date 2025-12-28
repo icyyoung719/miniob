@@ -419,7 +419,15 @@ RC PhysicalPlanGenerator::create_plan(OrderByLogicalOperator &order_oper, unique
     return rc;
   }
 
-  auto order_by_oper = make_unique<OrderByPhysicalOperator>(std::move(order_oper.order_by_expressions()));
+  // move order-by items (expr + asc flag) to physical operator
+  vector<OrderByPhysicalOperator::OrderByItem> items;
+  for (auto &it : order_oper.order_by_items()) {
+    OrderByPhysicalOperator::OrderByItem nb;
+    nb.expr = std::move(it.expr);
+    nb.asc = it.asc;
+    items.push_back(std::move(nb));
+  }
+  auto order_by_oper = make_unique<OrderByPhysicalOperator>(std::move(items));
   order_by_oper->add_child(std::move(child_physical_oper));
   oper = std::move(order_by_oper);
   return RC::SUCCESS;

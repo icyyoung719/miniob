@@ -19,14 +19,18 @@ See the Mulan PSL v2 for more details. */
 class OrderByLogicalOperator : public LogicalOperator
 {
 public:
-  OrderByLogicalOperator(vector<unique_ptr<Expression>> &&order_by_exprs);
+  struct OrderByItem {
+    unique_ptr<Expression> expr;
+    bool asc = true;
+  };
+  OrderByLogicalOperator(vector<OrderByItem> &&order_by_items);
   virtual ~OrderByLogicalOperator() = default;
 
   LogicalOperatorType type() const override { return LogicalOperatorType::ORDER_BY; }
   OpType              get_op_type() const override { return OpType::LOGICALORDERBY; }
 
-  auto &order_by_expressions() { return order_by_expressions_; }
+  auto &order_by_items() { return order_by_items_; }
 
 private:
-  vector<unique_ptr<Expression>> order_by_expressions_;
+  vector<OrderByItem> order_by_items_;
 };
