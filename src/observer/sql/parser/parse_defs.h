@@ -111,7 +111,8 @@ struct CalcSqlNode
 struct InsertSqlNode
 {
   string        relation_name;  ///< Relation to insert into
-  vector<Value> values;         ///< 要插入的值
+  // values: list of rows, each row is a vector of Value
+  vector<vector<Value>> values; ///< 要插入的值，支持多行插入
 };
 
 /**

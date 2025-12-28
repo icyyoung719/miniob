@@ -130,6 +130,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   Expression *                               expression;
   vector<unique_ptr<Expression>> *           expression_list;
   vector<Value> *                            value_list;
+  vector<vector<Value>> *                    value_rows;
   vector<ConditionSqlNode> *                 condition_list;
   vector<RelAttrSqlNode> *                   rel_attr_list;
   vector<string> *                           relation_list;
@@ -146,6 +147,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %destructor { delete $$; } <expression>
 %destructor { delete $$; } <expression_list>
 %destructor { delete $$; } <value_list>
+%destructor { delete $$; } <value_rows>
 %destructor { delete $$; } <condition_list>
 // %destructor { delete $$; } <rel_attr_list>
 %destructor { delete $$; } <relation_list>
@@ -168,6 +170,8 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <attr_infos>          attr_def_list
 %type <attr_info>           attr_def
 %type <value_list>          value_list
+%type <value_list>          value_tuple
+%type <value_rows>          value_rows
 %type <condition_list>      where
 %type <condition_list>      condition_list
 %type <cstring>             storage_format
@@ -410,12 +414,12 @@ attr_list:
     ;
 
 insert_stmt:        /*insert   语句的语法解析树*/
-    INSERT INTO ID VALUES LBRACE value_list RBRACE 
+    INSERT INTO ID VALUES value_rows
     {
       $$ = new ParsedSqlNode(SCF_INSERT);
       $$->insertion.relation_name = $3;
-      $$->insertion.values.swap(*$6);
-      delete $6;
+      $$->insertion.values.swap(*$5);
+      delete $5;
     }
     ;
 
@@ -426,9 +430,28 @@ value_list:
       $$->emplace_back(*$1);
       delete $1;
     }
-    | value_list COMMA value { 
+    | value_list COMMA value {
       $$ = $1;
       $$->emplace_back(*$3);
+      delete $3;
+    }
+
+value_tuple:
+    LBRACE value_list RBRACE
+    {
+      $$ = $2; /* $2 is vector<Value>* */
+    }
+
+value_rows:
+    value_tuple
+    {
+      $$ = new vector<vector<Value>>;
+      $$->push_back(*$1);
+      delete $1;
+    }
+    | value_rows COMMA value_tuple { 
+      $$ = $1;
+      $$->push_back(*$3);
       delete $3;
     }
     ;
