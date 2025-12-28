@@ -106,17 +106,9 @@ Tuple *OrderByPhysicalOperator::current_tuple()
 
 RC OrderByPhysicalOperator::tuple_schema(TupleSchema &schema) const
 {
-  if (rows_.empty()) {
-    return RC::SUCCESS;
-  }
-  const ValueListTuple &row = rows_.front().row;
-  const int cell_num = row.cell_num();
-  for (int i = 0; i < cell_num; i++) {
-    TupleCellSpec spec;
-    if (OB_FAIL(row.spec_at(i, spec))) {
-      continue;
-    }
-    schema.append_cell(spec);
+  // ORDER BY does not change the tuple schema; forward schema from child
+  if (!children_.empty() && children_[0] != nullptr) {
+    return children_[0]->tuple_schema(schema);
   }
   return RC::SUCCESS;
 }
