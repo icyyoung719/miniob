@@ -43,10 +43,11 @@ RC UpdatePhysicalOperator::open(Trx *trx)
         return rc2;
       }
 
-      // prepare value (cast if needed)
+      // prepare value (cast if needed). For TEXT fields, allow CHARS input without casting.
       Value real_value;
       const Value *value_ptr = &value_;
-      if (field->type() != value_.attr_type()) {
+      if (!(field->type() == AttrType::TEXTS && value_.attr_type() == AttrType::CHARS) &&
+          field->type() != value_.attr_type()) {
         rc2 = Value::cast_to(value_, field->type(), real_value);
         if (rc2 != RC::SUCCESS) {
           scanner->close_scan();
@@ -158,10 +159,11 @@ RC UpdatePhysicalOperator::open(Trx *trx)
         return rc2;
       }
 
-      // cast if needed
+      // cast if needed. For TEXT fields, allow CHARS input without casting.
       Value real_value;
       const Value *value_ptr = &value_;
-      if (field->type() != value_.attr_type()) {
+      if (!(field->type() == AttrType::TEXTS && value_.attr_type() == AttrType::CHARS) &&
+          field->type() != value_.attr_type()) {
         rc2 = Value::cast_to(value_, field->type(), real_value);
         if (rc2 != RC::SUCCESS) {
           LOG_WARN("failed to cast value for field %s", field->name());
