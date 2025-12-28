@@ -66,7 +66,28 @@ RC UpdatePhysicalOperator::open(Trx *trx)
         }
       }
 
-      rc2 = new_record.set_field(field->offset(), (int)copy_len, const_cast<char *>(value_ptr->data()));
+      if (field->type() == AttrType::TEXTS) {
+        if (table_->lob_handler() == nullptr) {
+          scanner->close_scan();
+          delete scanner;
+          LOG_WARN("lob handler is null for table %s", table_->name());
+          return RC::INTERNAL;
+        }
+        int64_t lob_offset = 0;
+        int64_t lob_len = (int64_t)value_ptr->length();
+        rc2 = table_->lob_handler()->insert_data(lob_offset, lob_len, value_ptr->data());
+        if (rc2 != RC::SUCCESS) {
+          scanner->close_scan();
+          delete scanner;
+          return rc2;
+        }
+        rc2 = new_record.set_field(field->offset(), (int)sizeof(lob_offset), (char *)&lob_offset);
+        if (rc2 == RC::SUCCESS) {
+          rc2 = new_record.set_field(field->offset() + (int)sizeof(lob_offset), (int)sizeof(lob_len), (char *)&lob_len);
+        }
+      } else {
+        rc2 = new_record.set_field(field->offset(), (int)copy_len, const_cast<char *>(value_ptr->data()));
+      }
       if (rc2 != RC::SUCCESS) {
         scanner->close_scan();
         delete scanner;
@@ -157,7 +178,26 @@ RC UpdatePhysicalOperator::open(Trx *trx)
         }
       }
 
-      rc2 = new_record.set_field(field->offset(), (int)copy_len, const_cast<char *>(value_ptr->data()));
+      if (field->type() == AttrType::TEXTS) {
+        if (table_->lob_handler() == nullptr) {
+          child->close();
+          LOG_WARN("lob handler is null for table %s", table_->name());
+          return RC::INTERNAL;
+        }
+        int64_t lob_offset = 0;
+        int64_t lob_len = (int64_t)value_ptr->length();
+        rc2 = table_->lob_handler()->insert_data(lob_offset, lob_len, value_ptr->data());
+        if (rc2 != RC::SUCCESS) {
+          child->close();
+          return rc2;
+        }
+        rc2 = new_record.set_field(field->offset(), (int)sizeof(lob_offset), (char *)&lob_offset);
+        if (rc2 == RC::SUCCESS) {
+          rc2 = new_record.set_field(field->offset() + (int)sizeof(lob_offset), (int)sizeof(lob_len), (char *)&lob_len);
+        }
+      } else {
+        rc2 = new_record.set_field(field->offset(), (int)copy_len, const_cast<char *>(value_ptr->data()));
+      }
       if (rc2 != RC::SUCCESS) {
         return rc2;
       }

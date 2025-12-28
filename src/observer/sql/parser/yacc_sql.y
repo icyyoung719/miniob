@@ -89,7 +89,8 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         TRX_COMMIT
         TRX_ROLLBACK
         INT_T
-        STRING_T
+  STRING_T
+  TEXT_T
         FLOAT_T
         VECTOR_T
         HELP
@@ -394,7 +395,14 @@ attr_def:
       $$ = new AttrInfoSqlNode;
       $$->type = (AttrType)$2;
       $$->name = $1;
-      $$->length = 4;
+      {
+        int t = $2;
+        if (t == static_cast<int>(AttrType::TEXTS)) {
+          $$->length = 16; /* store LOB offset (int64) + length (int64) in record */
+        } else {
+          $$->length = 4;
+        }
+      }
     }
     ;
 number:
@@ -403,6 +411,7 @@ number:
 type:
     INT_T      { $$ = static_cast<int>(AttrType::INTS); }
     | STRING_T { $$ = static_cast<int>(AttrType::CHARS); }
+  | TEXT_T   { $$ = static_cast<int>(AttrType::TEXTS); }
     | FLOAT_T  { $$ = static_cast<int>(AttrType::FLOATS); }
     | VECTOR_T { $$ = static_cast<int>(AttrType::VECTORS); }
     ;

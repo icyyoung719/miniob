@@ -197,7 +197,33 @@ public:
     const FieldMeta *field_meta = field_expr->field().meta();
     cell.reset();
     cell.set_type(field_meta->type());
-    cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
+    if (field_meta->type() == AttrType::TEXTS) {
+      // record stores int64 offset + int64 length
+      const char *p = this->record_->data() + field_meta->offset();
+      int64_t offset = 0;
+      int64_t len = 0;
+      memcpy(&offset, p, sizeof(offset));
+      memcpy(&len, p + sizeof(offset), sizeof(len));
+      if (table_ == nullptr || table_->lob_handler() == nullptr) {
+        LOG_WARN("lob handler is not available when reading TEXT field");
+        return RC::INTERNAL;
+      }
+      char *buf = (char *)malloc((size_t)len + 1);
+      if (buf == nullptr) {
+        LOG_WARN("failed to allocate buffer for lob data");
+        return RC::NOMEM;
+      }
+      RC rc = table_->lob_handler()->get_data(offset, len, buf);
+      if (rc != RC::SUCCESS) {
+        free(buf);
+        return rc;
+      }
+      buf[len] = '\0';
+      cell.set_string(buf, (int)len);
+      free(buf);
+    } else {
+      cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
+    }
     return RC::SUCCESS;
   }
 
