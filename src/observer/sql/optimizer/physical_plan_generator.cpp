@@ -39,6 +39,8 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/table_scan_physical_operator.h"
 #include "sql/operator/group_by_logical_operator.h"
 #include "sql/operator/group_by_physical_operator.h"
+#include "sql/operator/order_by_logical_operator.h"
+#include "sql/operator/order_by_physical_operator.h"
 #include "sql/operator/update_logical_operator.h"
 #include "sql/operator/update_physical_operator.h"
 #include "sql/operator/hash_group_by_physical_operator.h"
@@ -91,6 +93,9 @@ RC PhysicalPlanGenerator::create(LogicalOperator &logical_operator, unique_ptr<P
 
     case LogicalOperatorType::GROUP_BY: {
       return create_plan(static_cast<GroupByLogicalOperator &>(logical_operator), oper, session);
+    } break;
+    case LogicalOperatorType::ORDER_BY: {
+      return create_plan(static_cast<OrderByLogicalOperator &>(logical_operator), oper, session);
     } break;
 
     default: {
@@ -398,6 +403,26 @@ RC PhysicalPlanGenerator::create_plan(GroupByLogicalOperator &logical_oper, uniq
 
   oper = std::move(group_by_oper);
   return rc;
+}
+
+RC PhysicalPlanGenerator::create_plan(OrderByLogicalOperator &order_oper, unique_ptr<PhysicalOperator> &oper, Session* session)
+{
+  RC rc = RC::SUCCESS;
+
+  ASSERT(order_oper.children().size() == 1, "order by operator should have 1 child");
+
+  LogicalOperator &child_oper = *order_oper.children().front();
+  unique_ptr<PhysicalOperator> child_physical_oper;
+  rc = create(child_oper, child_physical_oper, session);
+  if (OB_FAIL(rc)) {
+    LOG_WARN("failed to create child physical operator of order by operator. rc=%s", strrc(rc));
+    return rc;
+  }
+
+  auto order_by_oper = make_unique<OrderByPhysicalOperator>(std::move(order_oper.order_by_expressions()));
+  order_by_oper->add_child(std::move(child_physical_oper));
+  oper = std::move(order_by_oper);
+  return RC::SUCCESS;
 }
 
 RC PhysicalPlanGenerator::create_vec_plan(TableGetLogicalOperator &table_get_oper, unique_ptr<PhysicalOperator> &oper, Session* session)
