@@ -70,6 +70,15 @@ public:
   RC open(Db *db, const char *meta_file, const char *base_dir);
 
   /**
+   * @brief 删除一个表及其所有相关数据
+   * @details 此函数会删除表的元数据文件、数据文件、所有索引文件以及LOB文件。
+   *          这是一个静态函数，因为它操作的是物理文件，而不是一个已打开的表对象。
+   * @param db 数据库对象，用于访问Buffer Pool Manager
+   * @param meta_file_path 表的元数据文件的完整路径
+   * @return RC::SUCCESS 表示成功，其他值表示失败
+   */
+  RC drop(Db *db, const char *table_name, const char *base_dir);
+  /**
    * @brief 根据给定的字段生成一个记录/行
    * @details 通常是由用户传过来的字段，按照schema信息组装成一个record。
    * @param value_num 字段的个数

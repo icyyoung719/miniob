@@ -176,6 +176,56 @@ RC Db::create_table(const char *table_name, span<const AttrInfoSqlNode> attribut
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 删除一个指定的表。
+ * 
+ * 该函数会执行以下操作：
+ * 1. 检查表是否存在于当前打开的表集合中。
+ * 2. 调用 Table 对象的 drop 方法来删除物理文件（数据文件和元数据文件）。
+ * 3. 从内存中的 opened_tables_ 映射中移除该表，并释放其内存。
+ * 
+ * @param table_name 要删除的表的名称。
+ * @return RC 成功返回 RC::SUCCESS，否则返回相应的错误码。
+ *         - RC::SCHEMA_TABLE_NOT_EXIST: 如果表不存在。
+ *         - 其他错误码: 如果在删除文件时发生 I/O 错误等。
+ */
+RC Db::drop_table(const char *table_name)
+{
+  RC rc = RC::SUCCESS;
+
+  // 1. 检查表是否存在
+  auto table_it = opened_tables_.find(table_name);
+  if (table_it == opened_tables_.end()) {
+    LOG_WARN("Failed to drop table. Table '%s' does not exist.", table_name);
+    return RC::SCHEMA_TABLE_NOT_EXIST;
+  }
+
+  // 2. 从映射中获取 Table 对象指针
+  Table *table_to_drop = table_it->second;
+
+  // 3. 调用 Table 的 drop 方法执行物理删除
+  // 这个方法负责删除磁盘上的数据文件和元数据文件
+  // rc = table_to_drop->drop();
+  rc = table_to_drop->drop(this, table_name, path_.c_str());
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("Failed to drop physical files for table '%s'.", table_name);
+    // 即使物理删除失败，也可以选择从内存中移除，但这可能导致状态不一致。
+    // 这里我们选择在物理删除失败时直接返回错误，保持状态一致。
+    return rc;
+  }
+
+  // 4. 清理内存
+  // 从 opened_tables_ 映射中移除条目
+  // opened_tables_.erase(table_it);
+  opened_tables_.erase(table_name);
+  // 释放之前 new 出来的 Table 对象的内存
+  delete table_to_drop;
+
+  LOG_INFO("Drop table success. Table name=%s", table_name);
+
+  return RC::SUCCESS;
+}
+
 Table *Db::find_table(const char *table_name) const
 {
   unordered_map<string, Table *>::const_iterator iter = opened_tables_.find(table_name);

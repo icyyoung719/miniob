@@ -71,6 +71,21 @@ public:
       const StorageFormat storage_format = StorageFormat::ROW_FORMAT);
 
   /**
+   * @brief 删除一个指定的表。
+   * 
+   * 该函数会执行以下操作：
+   * 1. 检查表是否存在于当前打开的表集合中。
+   * 2. 调用 Table 对象的 drop 方法来删除物理文件（数据文件和元数据文件）。
+   * 3. 从内存中的 opened_tables_ 映射中移除该表，并释放其内存。
+   * 
+   * @param table_name 要删除的表的名称。
+   * @return RC 成功返回 RC::SUCCESS，否则返回相应的错误码。
+   *         - RC::SCHEMA_TABLE_NOT_EXIST: 如果表不存在。
+   *         - 其他错误码: 如果在删除文件时发生 I/O 错误等。
+   */
+  RC drop_table(const char *table_name);
+
+  /**
    * @brief 根据表名查找表
    */
   Table *find_table(const char *table_name) const;
