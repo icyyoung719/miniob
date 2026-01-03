@@ -493,6 +493,14 @@ value:
       $$ = new Value((float)$1);
       @$ = @1;
     }
+    | '-' NUMBER {
+      $$ = new Value(-((int)$2));
+      @$ = @2;
+    }
+    | '-' FLOAT {
+      $$ = new Value(-((float)$2));
+      @$ = @2;
+    }
     |SSS {
       char *tmp = common::substr($1,1,strlen($1)-2);
       $$ = new Value(tmp);
@@ -698,64 +706,61 @@ condition_list:
     }
     | condition {
       $$ = new vector<ConditionSqlNode>;
-      $$->emplace_back(*$1);
+      $$->push_back(std::move(*$1));
       delete $1;
     }
     | condition AND condition_list {
       $$ = $3;
-      $$->emplace_back(*$1);
+      $$->push_back(std::move(*$1));
       delete $1;
     }
     ;
 condition:
-    rel_attr comp_op value
+    expression comp_op expression
     {
       $$ = new ConditionSqlNode;
-      $$->left_is_attr = 1;
-      $$->left_attr = *$1;
-      $$->right_is_attr = 0;
-      $$->right_value = *$3;
+      $$->left_expr.reset($1);
+      $$->right_expr.reset($3);
       $$->comp = $2;
 
-      delete $1;
-      delete $3;
-    }
-    | value comp_op value 
-    {
-      $$ = new ConditionSqlNode;
-      $$->left_is_attr = 0;
-      $$->left_value = *$1;
-      $$->right_is_attr = 0;
-      $$->right_value = *$3;
-      $$->comp = $2;
+      // try to fill legacy fields when possible
+      if ($$->left_expr) {
+        if ($$->left_expr->type() == ExprType::VALUE) {
+          $$->left_is_attr = 0;
+          ValueExpr *v = static_cast<ValueExpr *>(($$->left_expr).get());
+          $$->left_value = v->get_value();
+        } else if ($$->left_expr->type() == ExprType::UNBOUND_FIELD || $$->left_expr->type() == ExprType::FIELD) {
+          $$->left_is_attr = 1;
+          const char *tbl = ($$->left_expr->type() == ExprType::UNBOUND_FIELD)
+                                ? static_cast<UnboundFieldExpr *>(( $$->left_expr).get())->table_name()
+                                : static_cast<FieldExpr *>(( $$->left_expr).get())->table_name();
+          const char *fld = ($$->left_expr->type() == ExprType::UNBOUND_FIELD)
+                                ? static_cast<UnboundFieldExpr *>(( $$->left_expr).get())->field_name()
+                                : static_cast<FieldExpr *>(( $$->left_expr).get())->field_name();
+          $$->left_attr.relation_name = tbl ? tbl : string("");
+          $$->left_attr.attribute_name = fld ? fld : string("");
+        }
+      }
 
-      delete $1;
-      delete $3;
+      if ($$->right_expr) {
+        if ($$->right_expr->type() == ExprType::VALUE) {
+          $$->right_is_attr = 0;
+          ValueExpr *v = static_cast<ValueExpr *>(($$->right_expr).get());
+          $$->right_value = v->get_value();
+        } else if ($$->right_expr->type() == ExprType::UNBOUND_FIELD || $$->right_expr->type() == ExprType::FIELD) {
+          $$->right_is_attr = 1;
+          const char *tbl = ($$->right_expr->type() == ExprType::UNBOUND_FIELD)
+                                ? static_cast<UnboundFieldExpr *>(( $$->right_expr).get())->table_name()
+                                : static_cast<FieldExpr *>(( $$->right_expr).get())->table_name();
+          const char *fld = ($$->right_expr->type() == ExprType::UNBOUND_FIELD)
+                                ? static_cast<UnboundFieldExpr *>(( $$->right_expr).get())->field_name()
+                                : static_cast<FieldExpr *>(( $$->right_expr).get())->field_name();
+          $$->right_attr.relation_name = tbl ? tbl : string("");
+          $$->right_attr.attribute_name = fld ? fld : string("");
+        }
+      }
     }
-    | rel_attr comp_op rel_attr
-    {
-      $$ = new ConditionSqlNode;
-      $$->left_is_attr = 1;
-      $$->left_attr = *$1;
-      $$->right_is_attr = 1;
-      $$->right_attr = *$3;
-      $$->comp = $2;
-
-      delete $1;
-      delete $3;
-    }
-    | value comp_op rel_attr
-    {
-      $$ = new ConditionSqlNode;
-      $$->left_is_attr = 0;
-      $$->left_value = *$1;
-      $$->right_is_attr = 1;
-      $$->right_attr = *$3;
-      $$->comp = $2;
-
-      delete $1;
-      delete $3;
-    }
+    
     ;
 
 comp_op:

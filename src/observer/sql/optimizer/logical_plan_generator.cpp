@@ -180,18 +180,15 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
     return RC::INVALID_ARGUMENT;
   }
   vector<unique_ptr<Expression>> cmp_exprs;
-  const vector<FilterUnit *>    &filter_units = filter_stmt->filter_units();
-  for (const FilterUnit *filter_unit : filter_units) {
-    const FilterObj &filter_obj_left  = filter_unit->left();
-    const FilterObj &filter_obj_right = filter_unit->right();
+  const vector<ConditionSqlNode> &conditions = filter_stmt->conditions();
+  for (const ConditionSqlNode &condition : conditions) {
+    if (condition.left_expr == nullptr || condition.right_expr == nullptr) {
+      LOG_WARN("invalid condition expression");
+      return RC::INVALID_ARGUMENT;
+    }
 
-    unique_ptr<Expression> left(filter_obj_left.is_attr
-                                    ? static_cast<Expression *>(new FieldExpr(filter_obj_left.field))
-                                    : static_cast<Expression *>(new ValueExpr(filter_obj_left.value)));
-
-    unique_ptr<Expression> right(filter_obj_right.is_attr
-                                     ? static_cast<Expression *>(new FieldExpr(filter_obj_right.field))
-                                     : static_cast<Expression *>(new ValueExpr(filter_obj_right.value)));
+    unique_ptr<Expression> left = condition.left_expr->copy();
+    unique_ptr<Expression> right = condition.right_expr->copy();
 
     if (left->value_type() != right->value_type()) {
       auto left_to_right_cost = implicit_cast_cost(left->value_type(), right->value_type());
@@ -201,8 +198,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
         auto cast_expr = make_unique<CastExpr>(std::move(left), right->value_type());
         if (left_type == ExprType::VALUE) {
           Value left_val;
-          if (OB_FAIL(rc = cast_expr->try_get_value(left_val)))
-          {
+          if (OB_FAIL(rc = cast_expr->try_get_value(left_val))) {
             LOG_WARN("failed to get value from left child", strrc(rc));
             return rc;
           }
@@ -215,8 +211,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
         auto cast_expr = make_unique<CastExpr>(std::move(right), left->value_type());
         if (right_type == ExprType::VALUE) {
           Value right_val;
-          if (OB_FAIL(rc = cast_expr->try_get_value(right_val)))
-          {
+          if (OB_FAIL(rc = cast_expr->try_get_value(right_val))) {
             LOG_WARN("failed to get value from right child", strrc(rc));
             return rc;
           }
@@ -232,7 +227,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
       }
     }
 
-    ComparisonExpr *cmp_expr = new ComparisonExpr(filter_unit->comp(), std::move(left), std::move(right));
+    ComparisonExpr *cmp_expr = new ComparisonExpr(condition.comp, std::move(left), std::move(right));
     cmp_exprs.emplace_back(cmp_expr);
   }
 

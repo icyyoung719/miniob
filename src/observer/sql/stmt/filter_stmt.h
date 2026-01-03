@@ -76,15 +76,11 @@ public:
   virtual ~FilterStmt();
 
 public:
-  const vector<FilterUnit *> &filter_units() const { return filter_units_; }
+  const vector<ConditionSqlNode> &conditions() const { return conditions_; }
 
-public:
   static RC create(Db *db, Table *default_table, unordered_map<string, Table *> *tables,
       const ConditionSqlNode *conditions, int condition_num, FilterStmt *&stmt);
 
-  static RC create_filter_unit(Db *db, Table *default_table, unordered_map<string, Table *> *tables,
-      const ConditionSqlNode &condition, FilterUnit *&filter_unit);
-
 private:
-  vector<FilterUnit *> filter_units_;  // 默认当前都是AND关系
+  vector<ConditionSqlNode> conditions_;  // 默认当前都是AND关系
 };

@@ -69,6 +69,7 @@ enum CompOp
  */
 struct ConditionSqlNode
 {
+  // legacy fields (kept for backward compatibility)
   int left_is_attr;              ///< TRUE if left-hand side is an attribute
                                  ///< 1时，操作符左边是属性名，0时，是属性值
   Value          left_value;     ///< left-hand side value if left_is_attr = FALSE
@@ -78,6 +79,10 @@ struct ConditionSqlNode
                                  ///< 1时，操作符右边是属性名，0时，是属性值
   RelAttrSqlNode right_attr;     ///< right-hand side attribute if right_is_attr = TRUE 右边的属性
   Value          right_value;    ///< right-hand side value if right_is_attr = FALSE
+
+  // new expression-based fields
+  std::unique_ptr<Expression> left_expr;  ///< left-hand side expression
+  std::unique_ptr<Expression> right_expr; ///< right-hand side expression
 };
 
 /**
