@@ -190,6 +190,33 @@ RC Table::open(Db *db, const char *meta_file, const char *base_dir)
 
   db_       = db;
 
+  // 打开或创建 LOB 文件（仅当表中包含 TEXT 字段时）
+  {
+    bool has_lob = false;
+    for (int i = 0; i < table_meta_.field_num(); i++) {
+      const FieldMeta *f = table_meta_.field(i);
+      if (f->type() == AttrType::TEXTS) {
+        has_lob = true;
+        break;
+      }
+    }
+
+    if (has_lob) {
+      lob_handler_ = new LobFileHandler();
+      string lob_file = table_lob_file(base_dir, table_meta_.name());
+      RC rc2 = lob_handler_->open_file(lob_file.c_str());
+      if (rc2 == RC::FILE_NOT_EXIST) {
+        rc2 = lob_handler_->create_file(lob_file.c_str());
+      }
+      if (rc2 != RC::SUCCESS) {
+        LOG_ERROR("Failed to open/create lob file %s for table %s, rc=%d", lob_file.c_str(), table_meta_.name(), rc2);
+        delete lob_handler_;
+        lob_handler_ = nullptr;
+        return rc2;
+      }
+    }
+  }
+
   // // 加载数据文件
   // RC rc = init_record_handler(base_dir);
   // if (rc != RC::SUCCESS) {
