@@ -49,6 +49,16 @@ RC InsertStmt::create(Db *db, const InsertSqlNode &inserts, Stmt *&stmt)
     }
   }
 
+  // 为了语法一致性，这部分提前到语法分析阶段进行失败检查
+  // // 每一列的类型检查
+  // for (int i = table_meta.sys_field_num(); i < table_meta.field_num(); i++) {
+  //   // 如果是日期类型，检查日期是否合法
+  //   if (values[i].attr_type() == AttrType::DATES && !values[i].is_date_valid()) {
+  //     LOG_WARN("invalid date value: %s", values[i].to_string().c_str());
+  //     return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+  //   }
+  // }
+
   // everything alright
   stmt = new InsertStmt(table, inserts.values);
   return RC::SUCCESS;

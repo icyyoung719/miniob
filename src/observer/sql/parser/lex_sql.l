@@ -80,6 +80,8 @@ QUOTE            [\'\"]
 
 {DIGIT}+                           yylval->number=atoi(yytext); RETURN_TOKEN(NUMBER);
 {DIGIT}+{DOT}{DIGIT}+              yylval->floats=(float)(atof(yytext)); RETURN_TOKEN(FLOAT);
+"[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}"       yylval->cstring=strdup(yytext); RETURN_TOKEN(DATE);
+'[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}'       yylval->cstring=strdup(yytext); RETURN_TOKEN(DATE);
 
 ";"                                     RETURN_TOKEN(SEMICOLON);
 {DOT}                                   RETURN_TOKEN(DOT);
@@ -110,6 +112,7 @@ SET                                     RETURN_TOKEN(SET);
 BEGIN                                   RETURN_TOKEN(TRX_BEGIN);
 COMMIT                                  RETURN_TOKEN(TRX_COMMIT);
 ROLLBACK                                RETURN_TOKEN(TRX_ROLLBACK);
+DATE                                    RETURN_TOKEN(DATE_T);
 INT                                     RETURN_TOKEN(INT_T);
 CHAR                                    RETURN_TOKEN(STRING_T);
 TEXT                                    RETURN_TOKEN(TEXT_T);

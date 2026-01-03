@@ -30,6 +30,13 @@ Value::Value(const char *s, int len /*= 0*/) { set_string(s, len); }
 
 Value::Value(const string_t& s) { set_string(s.data(), s.size()); }
 
+// 从 YYYY-MM-DD 格式的日期字符串创建 Value（对合法性不做检查）
+Value *Value::from_date(const char *s)
+{
+  auto *val = new Value();
+  val->set_date(s);
+  return val;
+}
 
 Value::Value(const Value &other)
 {
@@ -128,6 +135,10 @@ void Value::set_data(char *data, int length)
       value_.bool_value_ = *(int *)data != 0;
       length_            = length;
     } break;
+    case AttrType::DATES: {
+      value_.int_value_ = *(int *)data;
+      length_           = length;
+    } break;
     default: {
       LOG_WARN("unknown data type: %d", attr_type_);
     } break;
@@ -191,6 +202,35 @@ void Value::set_empty_string(int len)
   
 }
 
+void Value::set_date(const char *s)
+{
+  reset();
+  attr_type_        = AttrType::DATES;
+  string date       = s;
+  string            dates;
+
+  std::stringstream ss(date);
+  std::string       part;
+  while (std::getline(ss, part, '-')) {
+    // 日期是 个位数 的情况
+    if (part.length() == 1) {
+      dates += "0" + part;
+    } else {
+      dates += part;
+    }
+  }
+  value_.int_value_ = atoi(dates.c_str());
+  length_           = sizeof(value_.int_value_);
+}
+
+void Value::set_date(int val)
+{
+  reset();
+  attr_type_        = AttrType::DATES;
+  value_.int_value_ = val;
+  length_           = sizeof(val);
+}
+
 void Value::set_value(const Value &value)
 {
   switch (value.attr_type_) {
@@ -205,6 +245,9 @@ void Value::set_value(const Value &value)
     } break;
     case AttrType::BOOLEANS: {
       set_boolean(value.get_boolean());
+    } break;
+    case AttrType::DATES: {
+      set_date(value.get_int());
     } break;
     default: {
       ASSERT(false, "got an invalid value type");
@@ -266,6 +309,9 @@ int Value::get_int() const
     }
     case AttrType::BOOLEANS: {
       return (int)(value_.bool_value_);
+    }
+    case AttrType::DATES: {
+      return value_.int_value_;
     }
     default: {
       LOG_WARN("unknown data type. type=%d", attr_type_);
@@ -348,4 +394,38 @@ bool Value::get_boolean() const
     }
   }
   return false;
+}
+
+
+// 判断日期范围有效性的函数，不会判断是否是 date 类型，需要调用者提前自己判断
+bool Value::is_date_valid() const
+{
+  // TODO: null?
+
+  int date  = get_int();
+  int year  = date / 10000;
+  int month = (date % 10000) / 100;
+  int day   = date % 100;
+  if (year < 1900 || year > 2100) {
+    return false;
+  }
+  if (month < 1 || month > 12) {
+    return false;
+  }
+  if (day < 1 || day > 31) {
+    return false;
+  }
+  // 判断闰年
+  if (month == 2) {
+    bool is_leap_year = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+    if (is_leap_year) {
+      return day <= 29;
+    } else {
+      return day <= 28;
+    }
+  }
+  if (month == 4 || month == 6 || month == 9 || month == 11) {
+    return day <= 30;
+  }
+  return true;
 }

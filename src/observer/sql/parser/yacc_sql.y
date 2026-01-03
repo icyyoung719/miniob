@@ -93,6 +93,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   TEXT_T
         FLOAT_T
         VECTOR_T
+        DATE_T
         HELP
         EXIT
         DOT //QUOTE
@@ -165,9 +166,12 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %token <floats> FLOAT
 %token <cstring> ID
 %token <cstring> SSS
+%token <cstring> DATE
 //非终结符
 
-/** type 定义了各种解析后的结果输出的是什么类型。类型对应了 union 中的定义的成员变量名称 **/
+/** type 定义了各种解析后的结果输出的是什么类型。类型对应了 union 中的定义的成员变量名称 
+*   左边是上面的 union 中定义的类型，右边是在下面用到的 token，意思就是右边的 token 解析后的结果是左边的类型
+**/
 %type <number>              type
 %type <condition>           condition
 %type <value>               value
@@ -414,6 +418,7 @@ type:
   | TEXT_T   { $$ = static_cast<int>(AttrType::TEXTS); }
     | FLOAT_T  { $$ = static_cast<int>(AttrType::FLOATS); }
     | VECTOR_T { $$ = static_cast<int>(AttrType::VECTORS); }
+    | DATE_T   { $$ = static_cast<int>(AttrType::DATES); }
     ;
 primary_key:
     /* empty */
@@ -505,6 +510,16 @@ value:
       char *tmp = common::substr($1,1,strlen($1)-2);
       $$ = new Value(tmp);
       free(tmp);
+    }
+    |DATE {
+      char *tmp = common::substr($1,1,strlen($1)-2);
+      $$ = Value::from_date(tmp);
+      if (!$$->is_date_valid()) {
+        $$->reset();
+      }
+      free(tmp);
+      // added
+      free($1);
     }
     ;
 storage_format:
