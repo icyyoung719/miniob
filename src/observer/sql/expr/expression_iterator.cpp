@@ -25,15 +25,19 @@ RC ExpressionIterator::iterate_child_expr(Expression &expr, function<RC(unique_p
   switch (expr.type()) {
     case ExprType::CAST: {
       auto &cast_expr = static_cast<CastExpr &>(expr);
-      rc = callback(cast_expr.child());
+      if (cast_expr.child() != nullptr) {
+        rc = callback(cast_expr.child());
+      }
     } break;
 
     case ExprType::COMPARISON: {
 
       auto &comparison_expr = static_cast<ComparisonExpr &>(expr);
-      rc = callback(comparison_expr.left());
+      if (comparison_expr.left() != nullptr) {
+        rc = callback(comparison_expr.left());
+      }
 
-      if (OB_SUCC(rc)) {
+      if (OB_SUCC(rc) && comparison_expr.right() != nullptr) {
         rc = callback(comparison_expr.right());
       }
 
@@ -52,15 +56,19 @@ RC ExpressionIterator::iterate_child_expr(Expression &expr, function<RC(unique_p
     case ExprType::ARITHMETIC: {
 
       auto &arithmetic_expr = static_cast<ArithmeticExpr &>(expr);
-      rc = callback(arithmetic_expr.left());
-      if (OB_SUCC(rc)) {
+      if (arithmetic_expr.left() != nullptr) {
+        rc = callback(arithmetic_expr.left());
+      }
+      if (OB_SUCC(rc) && arithmetic_expr.right() != nullptr) {
         rc = callback(arithmetic_expr.right());
       }
     } break;
 
     case ExprType::AGGREGATION: {
       auto &aggregate_expr = static_cast<AggregateExpr &>(expr);
-      rc = callback(aggregate_expr.child());
+      if (aggregate_expr.child() != nullptr) {
+        rc = callback(aggregate_expr.child());
+      }
     } break;
 
     case ExprType::NONE:

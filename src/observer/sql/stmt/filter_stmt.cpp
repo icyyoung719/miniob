@@ -35,7 +35,7 @@ RC FilterStmt::create(Db *db, Table *default_table, unordered_map<string, Table 
   }
   if (tables != nullptr) {
     for (auto &entry : *tables) {
-      if (entry.second != nullptr) {
+      if (entry.second != nullptr && entry.second != default_table) {
         binder_context.add_table(entry.second);
       }
     }
