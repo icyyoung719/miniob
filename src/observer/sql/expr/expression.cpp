@@ -635,32 +635,91 @@ RC AggregateExpr::type_from_string(const char *type_str, AggregateExpr::Type &ty
   return rc;
 }
 
-IsNullExpr::IsNullExpr(CompOp op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
-    : op_(op), left_(std::move(left)), right_(std::move(right)){};
-ExprType IsNullExpr::type() const { return ExprType::IS_NULL; }
-AttrType IsNullExpr::value_type() const { return AttrType::BOOLEANS; }
-int      IsNullExpr::value_length() const { return sizeof(bool); }
-RC       IsNullExpr::get_value(const Tuple &tuple, Value &value) const
+// IsNullExpr::IsNullExpr(CompOp op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
+//     : op_(op), left_(std::move(left)), right_(std::move(right)){};
+// ExprType IsNullExpr::type() const { return ExprType::IS_NULL; }
+// AttrType IsNullExpr::value_type() const { return AttrType::BOOLEANS; }
+// int      IsNullExpr::value_length() const { return sizeof(bool); }
+// RC       IsNullExpr::get_value(const Tuple &tuple, Value &value) const
+// {
+//   ASSERT(right_->type() == ExprType::VALUE, "'is' must be followed by null/not null");
+//   auto null_expr  = static_cast<ValueExpr *>(right_.get());
+//   auto null_value = null_expr->get_value();
+//   ASSERT(null_value.is_null(), "'is' must be followed by null/not null");
+//   Value left_value;
+//   RC    rc = left_->get_value(tuple, left_value);
+//   if (OB_FAIL(rc)) {
+//     LOG_WARN("failed to get left value, rc=", strrc(rc));
+//     return rc;
+//   }
+//   bool is = left_value.is_null();
+//   if (op_ == CompOp::IS) {
+//     value.set_boolean(is);
+//   } else if (op_ == CompOp::NOT_IS) {
+//     value.set_boolean(!is);
+//   } else {
+//     ASSERT(false, "IsNullExpr cannot handle CompOp: %d", static_cast<int>(op_));
+//   }
+//   return RC::SUCCESS;
+// }
+// std::unique_ptr<Expression> &IsNullExpr::left() { return left_; }
+// std::unique_ptr<Expression> &IsNullExpr::right() { return right_; }
+
+IsExpr::IsExpr(CompOp comp_op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
+    : comp_op_(comp_op), left_(std::move(left)), right_(std::move(right)) {}
+
+ExprType IsExpr::type() const { return ExprType::IS; }
+
+AttrType IsExpr::value_type() const { return AttrType::BOOLEANS; }
+
+int IsExpr::value_length() const { return sizeof(bool); }
+
+std::unique_ptr<Expression> IsExpr::copy() const {
+    // 创建一个新的 IsExpr 对象。
+    // 对于它的 left_ 和 right_ 子表达式，我们不能直接拷贝指针，
+    // 而是应该调用它们各自的 copy() 方法来创建深拷贝。
+    // 这确保了整个表达式树都是独立的副本。
+    return std::make_unique<IsExpr>(
+        this->comp_op_,          // 拷贝比较运算符
+        this->left_->copy(),     // 递归拷贝左子表达式
+        this->right_->copy()     // 递归拷贝右子表达式
+    );
+}
+
+RC IsExpr::get_value(const Tuple &tuple, Value &value) const
 {
-  ASSERT(right_->type() == ExprType::VALUE, "'is' must be followed by null/not null");
-  auto null_expr  = static_cast<ValueExpr *>(right_.get());
-  auto null_value = null_expr->get_value();
-  ASSERT(null_value.is_null(), "'is' must be followed by null/not null");
+  RC rc = RC::SUCCESS;
+  if (right_->type() != ExprType::VALUE) {
+    LOG_WARN("right expression of IS must be a constant");
+    return RC::INVALID_ARGUMENT;
+  }
+  Value right_value;
   Value left_value;
-  RC    rc = left_->get_value(tuple, left_value);
-  if (OB_FAIL(rc)) {
-    LOG_WARN("failed to get left value, rc=", strrc(rc));
+  rc = right_->get_value(tuple, right_value);
+
+  if (rc != RC::SUCCESS) {
     return rc;
   }
-  bool is = left_value.is_null();
-  if (op_ == CompOp::IS) {
-    value.set_boolean(is);
-  } else if (op_ == CompOp::NOT_IS) {
-    value.set_boolean(!is);
-  } else {
-    ASSERT(false, "IsNullExpr cannot handle CompOp: %d", static_cast<int>(op_));
+  rc = left_->get_value(tuple, left_value);
+
+  if (rc != RC::SUCCESS) {
+    return rc;
   }
+
+  if (right_value.is_null()) {
+    if (comp_op_ == CompOp::IS) {
+      value.set_boolean(left_value.is_null());
+    } else {
+      value.set_boolean(!left_value.is_null());
+    }
+  } else if (right_value.attr_type() == AttrType::BOOLEANS) {
+    value.set_boolean(left_value.is_null() == right_value.get_boolean());
+  } else {
+    LOG_WARN("right expression of IS must be a boolean constant");
+    return RC::INVALID_ARGUMENT;
+  }
+  
   return RC::SUCCESS;
 }
-std::unique_ptr<Expression> &IsNullExpr::left() { return left_; }
-std::unique_ptr<Expression> &IsNullExpr::right() { return right_; }
+std::unique_ptr<Expression> &IsExpr::left() { return left_; }
+std::unique_ptr<Expression> &IsExpr::right() { return right_; }

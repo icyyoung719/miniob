@@ -26,6 +26,7 @@ See the Mulan PSL v2 for more details. */
  * @details 与DataType，就是数据类型，配套完成各种算术运算、比较、类型转换等操作。这里同时记录了数据的值与类型。
  * 当需要对值做运算时，建议使用类似 Value::add 的操作而不是 DataType::add。在进行运算前，应该设置好结果的类型，
  * 比如进行两个INT类型的除法运算时，结果类型应该设置为FLOAT。
+ * 当一个 Value 的值是 NULL 的时候，不考虑类型！！！
  */
 class Value final
 {
@@ -38,9 +39,7 @@ public:
   friend class VectorType;
   friend class DateType;
 
-  // NULL
-  Value();
-  // Value() = default;
+  Value() = default;
 
   ~Value() { reset(); }
 
@@ -51,6 +50,9 @@ public:
   explicit Value(bool val);
   explicit Value(const char *s, int len = 0);
   explicit Value(const string_t &val);
+
+  // 类型未定义的 NULL？
+  static Value NullValue();
 
   static Value *from_date(const char *s);   // 通过date字符串a创建Value
 
@@ -66,7 +68,7 @@ public:
   {
     // NULL 参与 + 产生 NULL
     if (left.is_null() || right.is_null()) {
-      result.set_is_null(true);
+      result.set_is_null();
       return RC::SUCCESS;
     }
     return DataType::type_instance(result.attr_type())->add(left, right, result);
@@ -76,7 +78,7 @@ public:
   {
     // NULL 参与 - 产生 NULL
     if (left.is_null() || right.is_null()) {
-      result.set_is_null(true);
+      result.set_is_null();
       return RC::SUCCESS;
     }
     return DataType::type_instance(result.attr_type())->subtract(left, right, result);
@@ -86,7 +88,7 @@ public:
   {
     // NULL 参与 * 产生 NULL
     if (left.is_null() || right.is_null()) {
-      result.set_is_null(true);
+      result.set_is_null();
       return RC::SUCCESS;
     }
     return DataType::type_instance(result.attr_type())->multiply(left, right, result);
@@ -96,7 +98,7 @@ public:
   {
     // NULL 参与 / 产生 NULL
     if (left.is_null() || right.is_null()) {
-      result.set_is_null(true);
+      result.set_is_null();
       return RC::SUCCESS;
     }
     return DataType::type_instance(result.attr_type())->divide(left, right, result);
@@ -106,7 +108,7 @@ public:
   {
     // NULL 运算
     if (value.is_null()) {
-      result.set_is_null(true);
+      result.set_is_null();
       return RC::SUCCESS;
     }
     return DataType::type_instance(result.attr_type())->negative(value, result);
@@ -118,7 +120,7 @@ public:
     // 但构造出的 NULL 是未定义类型，需要转型到正确类型
     if (value.is_null()) {
       result.set_type(to_type);
-      result.set_is_null(true);
+      result.set_is_null();
       return RC::SUCCESS;
     }
     return DataType::type_instance(value.attr_type())->cast_to(value, to_type, result);
@@ -131,7 +133,7 @@ public:
   void set_boolean(bool val);
   void set_date(const char *s);  // 从 "YYYY-MM-DD" 格式的日期字符串创建 Value
   void set_date(int val);        // 从 YYYYMMDD 格式的整数创建 Value
-  void set_is_null(bool is_null);  // NULL
+  void set_is_null();            // NULL 不考虑其类型
 
   string to_string() const;
 

@@ -47,7 +47,7 @@ enum class ExprType
   CONJUNCTION,  ///< 多个表达式使用同一种关系(AND或OR)来联结
   ARITHMETIC,   ///< 算术运算
   AGGREGATION,  ///< 聚合运算
-  IS_NULL,      ///< 判断是否为 NULL
+  IS,           ///< 判断是否为 NULL
 };
 
 /**
@@ -530,10 +530,15 @@ private:
   unique_ptr<Expression> child_;
 };
 
-class IsNullExpr : public Expression
+/**
+ * @brief IS 表达式
+ * @ingroup Expression
+ * @details IS 表达式，用于判断是否为 NULL 或者 true 或 false
+ */
+class IsExpr : public Expression
 {
 public:
-  IsNullExpr(CompOp op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right);
+  IsExpr(CompOp comp_op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right);
   ExprType                     type() const override;
   AttrType                     value_type() const override;
   int                          value_length() const override;
@@ -541,8 +546,10 @@ public:
   std::unique_ptr<Expression> &left();
   std::unique_ptr<Expression> &right();
 
+  std::unique_ptr<Expression> copy() const override;
+
 private:
-  CompOp                      op_;
+  CompOp                      comp_op_;   // IS 或 IS NOT
   std::unique_ptr<Expression> left_;
   std::unique_ptr<Expression> right_;
 };

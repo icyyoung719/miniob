@@ -86,8 +86,8 @@ RC ExpressionBinder::bind_expression(unique_ptr<Expression> &expr, vector<unique
       return bind_arithmetic_expression(expr, bound_expressions);
     } break;
 
-    case ExprType::IS_NULL: {
-      return bind_is_null_expression(expr, bound_expressions);
+    case ExprType::IS: {
+      return bind_is_expression(expr, bound_expressions);
     } break;
 
     case ExprType::AGGREGATION: {
@@ -457,41 +457,58 @@ RC ExpressionBinder::bind_aggregate_expression(
 }
 
 
-RC ExpressionBinder::bind_is_null_expression(
-    std::unique_ptr<Expression> &is_null_expr, std::vector<std::unique_ptr<Expression>> &bound_expressions)
+RC ExpressionBinder::bind_is_expression(
+    std::unique_ptr<Expression> &expr, std::vector<std::unique_ptr<Expression>> &bound_expressions)
 {
-  if (nullptr == is_null_expr) {
+  if (nullptr == expr) {
     return RC::SUCCESS;
   }
-  auto like_expr = static_cast<IsNullExpr *>(is_null_expr.get());
+  auto is_expr = static_cast<IsExpr *>(expr.get());
   vector<unique_ptr<Expression>> child_bound_expressions;
-  unique_ptr<Expression>        &left  = like_expr->left();
-  unique_ptr<Expression>        &right = like_expr->right();
-  RC rc = bind_expression(left, child_bound_expressions);
+  unique_ptr<Expression>        &left  = is_expr->left();
+  unique_ptr<Expression>        &right = is_expr->right();
+  
+  // is 右边必须是常量
+  if (right->type() != ExprType::VALUE) {
+    LOG_WARN("right expression of IS must be a constant");
+    return RC::INVALID_ARGUMENT;
+  }
+  RC rc = RC::SUCCESS;
+  rc = bind_expression(left, child_bound_expressions);
+
   if (OB_FAIL(rc)) {
     return rc;
   }
+
   if (child_bound_expressions.size() != 1) {
     LOG_WARN("invalid left children number of comparison expression: %d", child_bound_expressions.size());
     return RC::INVALID_ARGUMENT;
   }
+
+  // left bound
   unique_ptr<Expression> &lBoundedExpr = child_bound_expressions[0];
+
   if (lBoundedExpr.get() != left.get()) {
     left.reset(lBoundedExpr.release());
   }
+
   child_bound_expressions.clear();
   rc = bind_expression(right, child_bound_expressions);
+
   if (OB_FAIL(rc)) {
     return rc;
   }
+
   if (child_bound_expressions.size() != 1) {
     LOG_WARN("invalid right children number of comparison expression: %d", child_bound_expressions.size());
     return RC::INVALID_ARGUMENT;
   }
+  
+  // right bound
   unique_ptr<Expression> &rBoundedExpr = child_bound_expressions[0];
   if (rBoundedExpr.get() != right.get()) {
     right.reset(rBoundedExpr.release());
   }
-  bound_expressions.emplace_back(std::move(like_expr));
+  bound_expressions.emplace_back(std::move(expr));
   return RC::SUCCESS;
 }

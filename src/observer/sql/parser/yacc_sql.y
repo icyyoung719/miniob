@@ -502,6 +502,7 @@ value:
     }
     |NULL_T {
       $$ = new Value();
+      $$->set_is_null();
       @$ = @1;
     }
     ;

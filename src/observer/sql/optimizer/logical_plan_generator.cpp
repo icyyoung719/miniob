@@ -153,6 +153,8 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
 {
   RC                                  rc = RC::SUCCESS;
   vector<unique_ptr<Expression>> cmp_exprs;
+
+  // 下面的部分不能处理 where 1 is null 的情况
   const vector<FilterUnit *>    &filter_units = filter_stmt->filter_units();
   for (const FilterUnit *filter_unit : filter_units) {
     const FilterObj &filter_obj_left  = filter_unit->left();
@@ -166,47 +168,97 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
                                      ? static_cast<Expression *>(new FieldExpr(filter_obj_right.field))
                                      : static_cast<Expression *>(new ValueExpr(filter_obj_right.value)));
 
-    if (left->value_type() != right->value_type()) {
-      auto left_to_right_cost = implicit_cast_cost(left->value_type(), right->value_type());
-      auto right_to_left_cost = implicit_cast_cost(right->value_type(), left->value_type());
-      if (left_to_right_cost <= right_to_left_cost && left_to_right_cost != INT32_MAX) {
-        ExprType left_type = left->type();
-        auto cast_expr = make_unique<CastExpr>(std::move(left), right->value_type());
-        if (left_type == ExprType::VALUE) {
-          Value left_val;
-          if (OB_FAIL(rc = cast_expr->try_get_value(left_val)))
-          {
-            LOG_WARN("failed to get value from left child", strrc(rc));
-            return rc;
-          }
-          left = make_unique<ValueExpr>(left_val);
-        } else {
-          left = std::move(cast_expr);
-        }
-      } else if (right_to_left_cost < left_to_right_cost && right_to_left_cost != INT32_MAX) {
-        ExprType right_type = right->type();
-        auto cast_expr = make_unique<CastExpr>(std::move(right), left->value_type());
-        if (right_type == ExprType::VALUE) {
-          Value right_val;
-          if (OB_FAIL(rc = cast_expr->try_get_value(right_val)))
-          {
-            LOG_WARN("failed to get value from right child", strrc(rc));
-            return rc;
-          }
-          right = make_unique<ValueExpr>(right_val);
-        } else {
-          right = std::move(cast_expr);
-        }
 
-      } else {
-        rc = RC::UNSUPPORTED;
-        LOG_WARN("unsupported cast from %s to %s", attr_type_to_string(left->value_type()), attr_type_to_string(right->value_type()));
-        return rc;
+    // ======================= 关键改动开始 =======================
+    // 根据比较运算符的类型，创建不同的 Expression 对象
+    if (filter_unit->comp() == CompOp::IS || filter_unit->comp() == CompOp::NOT_IS) {
+      // 如果是 IS 或 IS NOT 操作，则创建 IsExpr 对象
+      cmp_exprs.emplace_back(new IsExpr(filter_unit->comp(), std::move(left), std::move(right)));
+    } else {
+      // 否则，执行原有的类型转换逻辑，并创建 ComparisonExpr 对象
+      if (left->value_type() != right->value_type()) {
+        auto left_to_right_cost = implicit_cast_cost(left->value_type(), right->value_type());
+        auto right_to_left_cost = implicit_cast_cost(right->value_type(), left->value_type());
+        if (left_to_right_cost <= right_to_left_cost && left_to_right_cost != INT32_MAX) {
+          ExprType left_type = left->type();
+          auto cast_expr = make_unique<CastExpr>(std::move(left), right->value_type());
+          if (left_type == ExprType::VALUE) {
+            Value left_val;
+            if (OB_FAIL(rc = cast_expr->try_get_value(left_val)))
+            {
+              LOG_WARN("failed to get value from left child", strrc(rc));
+              return rc;
+            }
+            left = make_unique<ValueExpr>(left_val);
+          } else {
+            left = std::move(cast_expr);
+          }
+        } else if (right_to_left_cost < left_to_right_cost && right_to_left_cost != INT32_MAX) {
+          ExprType right_type = right->type();
+          auto cast_expr = make_unique<CastExpr>(std::move(right), left->value_type());
+          if (right_type == ExprType::VALUE) {
+            Value right_val;
+            if (OB_FAIL(rc = cast_expr->try_get_value(right_val)))
+            {
+              LOG_WARN("failed to get value from right child", strrc(rc));
+              return rc;
+            }
+            right = make_unique<ValueExpr>(right_val);
+          } else {
+            right = std::move(cast_expr);
+          }
+        } else {
+          rc = RC::UNSUPPORTED;
+          LOG_WARN("unsupported cast from %s to %s", attr_type_to_string(left->value_type()), attr_type_to_string(right->value_type()));
+          return rc;
+        }
       }
+      // 创建 ComparisonExpr 对象
+      cmp_exprs.emplace_back(new ComparisonExpr(filter_unit->comp(), std::move(left), std::move(right)));
     }
+    // ======================= 关键改动结束 =======================
+  
+    // if (left->value_type() != right->value_type()) {
+    //   auto left_to_right_cost = implicit_cast_cost(left->value_type(), right->value_type());
+    //   auto right_to_left_cost = implicit_cast_cost(right->value_type(), left->value_type());
+    //   if (left_to_right_cost <= right_to_left_cost && left_to_right_cost != INT32_MAX) {
+    //     ExprType left_type = left->type();
+    //     auto cast_expr = make_unique<CastExpr>(std::move(left), right->value_type());
+    //     if (left_type == ExprType::VALUE) {
+    //       Value left_val;
+    //       if (OB_FAIL(rc = cast_expr->try_get_value(left_val)))
+    //       {
+    //         LOG_WARN("failed to get value from left child", strrc(rc));
+    //         return rc;
+    //       }
+    //       left = make_unique<ValueExpr>(left_val);
+    //     } else {
+    //       left = std::move(cast_expr);
+    //     }
+    //   } else if (right_to_left_cost < left_to_right_cost && right_to_left_cost != INT32_MAX) {
+    //     ExprType right_type = right->type();
+    //     auto cast_expr = make_unique<CastExpr>(std::move(right), left->value_type());
+    //     if (right_type == ExprType::VALUE) {
+    //       Value right_val;
+    //       if (OB_FAIL(rc = cast_expr->try_get_value(right_val)))
+    //       {
+    //         LOG_WARN("failed to get value from right child", strrc(rc));
+    //         return rc;
+    //       }
+    //       right = make_unique<ValueExpr>(right_val);
+    //     } else {
+    //       right = std::move(cast_expr);
+    //     }
 
-    ComparisonExpr *cmp_expr = new ComparisonExpr(filter_unit->comp(), std::move(left), std::move(right));
-    cmp_exprs.emplace_back(cmp_expr);
+    //   } else {
+    //     rc = RC::UNSUPPORTED;
+    //     LOG_WARN("unsupported cast from %s to %s", attr_type_to_string(left->value_type()), attr_type_to_string(right->value_type()));
+    //     return rc;
+    //   }
+    // }
+
+    // ComparisonExpr *cmp_expr = new ComparisonExpr(filter_unit->comp(), std::move(left), std::move(right));
+    // cmp_exprs.emplace_back(cmp_expr);
   }
 
   unique_ptr<PredicateLogicalOperator> predicate_oper;

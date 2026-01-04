@@ -20,7 +20,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 #include "common/log/log.h"
 
-Value::Value() : is_null_(true) {}
+//Value::Value() : is_null_(true) {}
 
 Value::Value(int val) { set_int(val); }
 
@@ -31,6 +31,13 @@ Value::Value(bool val) { set_boolean(val); }
 Value::Value(const char *s, int len /*= 0*/) { set_string(s, len); }
 
 Value::Value(const string_t& s) { set_string(s.data(), s.size()); }
+
+Value Value::NullValue()
+{
+  Value value;
+  value.set_is_null();
+  return value;
+}
 
 // 从 YYYY-MM-DD 格式的日期字符串创建 Value（对合法性不做检查）
 Value *Value::from_date(const char *s)
@@ -244,6 +251,11 @@ void Value::set_date(int val)
 
 void Value::set_value(const Value &value)
 {
+  reset();
+  if (value.is_null()) {
+    set_is_null();
+    return;
+  }
   switch (value.attr_type_) {
     case AttrType::INTS: {
       set_int(value.get_int());
@@ -265,11 +277,12 @@ void Value::set_value(const Value &value)
     } break;
   }
 
-  set_is_null(value.is_null());
+  // set_is_null(value.is_null());
 }
 
 void Value::set_string_from_other(const Value &other)
 {
+  reset();
   ASSERT(attr_type_ == AttrType::CHARS, "attr type is not CHARS");
   if (own_data_ && other.value_.pointer_value_ != nullptr && length_ != 0) {
     this->value_.pointer_value_ = new char[this->length_ + 1];
@@ -278,42 +291,10 @@ void Value::set_string_from_other(const Value &other)
   }
 }
 
-void Value::set_is_null(bool is_null){
-  is_null_ = is_null;
-  if (!is_null_) {
-    return;
-  }
-  // 为各类型的 null 值准备数据，复制 value 的数据时可以不用考虑 null 值的存在
-  switch (attr_type_) {
-    case AttrType::BOOLEANS: {
-      value_.bool_value_ = false;
-      length_            = sizeof(bool);
-    } break;
-    case AttrType::CHARS: {
-      if (own_data_ && value_.pointer_value_ != nullptr) {
-        break;
-      }
-      value_.pointer_value_    = new char[1];
-      value_.pointer_value_[0] = '\0';
-      length_                  = 0;
-      own_data_                = true;
-    } break;
-    
-    case AttrType::DATES:
-
-    case AttrType::INTS: {
-      value_.int_value_ = 0;
-      length_           = sizeof(int);
-    } break;
-    case AttrType::FLOATS: {
-      value_.float_value_ = 0;
-      length_             = sizeof(float);
-    } break;
-    case AttrType::UNDEFINED: {
-      ASSERT(false, "please set data type before set null");
-    } break;
-    default: ASSERT(false, "unimplemented");
-  }
+void Value::set_is_null(){
+  reset();
+  is_null_ = true;
+  attr_type_ = AttrType::NULLS;
 }
 
 char *Value::data() const
