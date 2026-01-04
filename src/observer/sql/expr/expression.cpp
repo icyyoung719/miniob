@@ -144,6 +144,12 @@ RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &re
   RC  rc         = RC::SUCCESS;
   int cmp_result = left.compare(right);
   result         = false;
+
+  
+  if (cmp_result == INT32_MAX) {    // NULL 比较结果
+    return RC::SUCCESS;
+  }
+
   switch (comp_) {
     case EQUAL_TO: {
       result = (0 == cmp_result);

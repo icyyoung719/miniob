@@ -20,6 +20,8 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 #include "common/log/log.h"
 
+Value::Value() : is_null_(true) {}
+
 Value::Value(int val) { set_int(val); }
 
 Value::Value(float val) { set_float(val); }
@@ -43,6 +45,7 @@ Value::Value(const Value &other)
   this->attr_type_ = other.attr_type_;
   this->length_    = other.length_;
   this->own_data_  = other.own_data_;
+  this->is_null_   = other.is_null_;
   switch (this->attr_type_) {
     case AttrType::CHARS: {
       set_string_from_other(other);
@@ -60,6 +63,7 @@ Value::Value(Value &&other)
   this->length_    = other.length_;
   this->own_data_  = other.own_data_;
   this->value_     = other.value_;
+  this->is_null_   = other.is_null_;
   other.own_data_  = false;
   other.length_    = 0;
 }
@@ -73,6 +77,7 @@ Value &Value::operator=(const Value &other)
   this->attr_type_ = other.attr_type_;
   this->length_    = other.length_;
   this->own_data_  = other.own_data_;
+  this->is_null_   = other.is_null_;
   switch (this->attr_type_) {
     case AttrType::CHARS: {
       set_string_from_other(other);
@@ -95,6 +100,7 @@ Value &Value::operator=(Value &&other)
   this->length_    = other.length_;
   this->own_data_  = other.own_data_;
   this->value_     = other.value_;
+  this->is_null_   = other.is_null_;
   other.own_data_  = false;
   other.length_    = 0;
   return *this;
@@ -115,6 +121,7 @@ void Value::reset()
   attr_type_ = AttrType::UNDEFINED;
   length_    = 0;
   own_data_  = false;
+  is_null_   = false;
 }
 
 void Value::set_data(char *data, int length)
@@ -124,20 +131,24 @@ void Value::set_data(char *data, int length)
       set_string(data, length);
     } break;
     case AttrType::INTS: {
-      value_.int_value_ = *(int *)data;
-      length_           = length;
+      memcpy(&value_.int_value_, data, length);
+      // value_.int_value_ = *(int *)data;
+      // length_           = length;
     } break;
     case AttrType::FLOATS: {
-      value_.float_value_ = *(float *)data;
-      length_             = length;
+      memcpy(&value_.float_value_, data, length);
+      // value_.float_value_ = *(float *)data;
+      // length_             = length;
     } break;
     case AttrType::BOOLEANS: {
-      value_.bool_value_ = *(int *)data != 0;
-      length_            = length;
+      memcpy(&value_.bool_value_, data, length);
+      // value_.bool_value_ = *(int *)data != 0;
+      // length_            = length;
     } break;
     case AttrType::DATES: {
-      value_.int_value_ = *(int *)data;
-      length_           = length;
+      memcpy(&value_.int_value_, data, length);
+      // value_.int_value_ = *(int *)data;
+      // length_           = length;
     } break;
     default: {
       LOG_WARN("unknown data type: %d", attr_type_);
@@ -253,6 +264,8 @@ void Value::set_value(const Value &value)
       ASSERT(false, "got an invalid value type");
     } break;
   }
+
+  set_is_null(value.is_null());
 }
 
 void Value::set_string_from_other(const Value &other)
@@ -262,6 +275,44 @@ void Value::set_string_from_other(const Value &other)
     this->value_.pointer_value_ = new char[this->length_ + 1];
     memcpy(this->value_.pointer_value_, other.value_.pointer_value_, this->length_);
     this->value_.pointer_value_[this->length_] = '\0';
+  }
+}
+
+void Value::set_is_null(bool is_null){
+  is_null_ = is_null;
+  if (!is_null_) {
+    return;
+  }
+  // 为各类型的 null 值准备数据，复制 value 的数据时可以不用考虑 null 值的存在
+  switch (attr_type_) {
+    case AttrType::BOOLEANS: {
+      value_.bool_value_ = false;
+      length_            = sizeof(bool);
+    } break;
+    case AttrType::CHARS: {
+      if (own_data_ && value_.pointer_value_ != nullptr) {
+        break;
+      }
+      value_.pointer_value_    = new char[1];
+      value_.pointer_value_[0] = '\0';
+      length_                  = 0;
+      own_data_                = true;
+    } break;
+    
+    case AttrType::DATES:
+
+    case AttrType::INTS: {
+      value_.int_value_ = 0;
+      length_           = sizeof(int);
+    } break;
+    case AttrType::FLOATS: {
+      value_.float_value_ = 0;
+      length_             = sizeof(float);
+    } break;
+    case AttrType::UNDEFINED: {
+      ASSERT(false, "please set data type before set null");
+    } break;
+    default: ASSERT(false, "unimplemented");
   }
 }
 
@@ -280,6 +331,9 @@ char *Value::data() const
 string Value::to_string() const
 {
   string res;
+  if (is_null_) {
+    return "NULL";
+  }
   RC     rc = DataType::type_instance(this->attr_type_)->to_string(*this, res);
   if (OB_FAIL(rc)) {
     LOG_WARN("failed to convert value to string. type=%s", attr_type_to_string(this->attr_type_));
@@ -288,7 +342,14 @@ string Value::to_string() const
   return res;
 }
 
-int Value::compare(const Value &other) const { return DataType::type_instance(this->attr_type_)->compare(*this, other); }
+int Value::compare(const Value &other) const {
+  // ???
+  if (is_null_ || other.is_null_) {
+    return INT32_MAX;  // 表示未实现的比较
+  }
+
+  return DataType::type_instance(this->attr_type_)->compare(*this, other); 
+}
 
 int Value::get_int() const
 {

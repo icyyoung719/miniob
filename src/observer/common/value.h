@@ -38,7 +38,9 @@ public:
   friend class VectorType;
   friend class DateType;
 
-  Value() = default;
+  // NULL
+  Value();
+  // Value() = default;
 
   ~Value() { reset(); }
 
@@ -62,31 +64,63 @@ public:
 
   static RC add(const Value &left, const Value &right, Value &result)
   {
+    // NULL 参与 + 产生 NULL
+    if (left.is_null() || right.is_null()) {
+      result.set_is_null(true);
+      return RC::SUCCESS;
+    }
     return DataType::type_instance(result.attr_type())->add(left, right, result);
   }
 
   static RC subtract(const Value &left, const Value &right, Value &result)
   {
+    // NULL 参与 - 产生 NULL
+    if (left.is_null() || right.is_null()) {
+      result.set_is_null(true);
+      return RC::SUCCESS;
+    }
     return DataType::type_instance(result.attr_type())->subtract(left, right, result);
   }
 
   static RC multiply(const Value &left, const Value &right, Value &result)
   {
+    // NULL 参与 * 产生 NULL
+    if (left.is_null() || right.is_null()) {
+      result.set_is_null(true);
+      return RC::SUCCESS;
+    }
     return DataType::type_instance(result.attr_type())->multiply(left, right, result);
   }
 
   static RC divide(const Value &left, const Value &right, Value &result)
   {
+    // NULL 参与 / 产生 NULL
+    if (left.is_null() || right.is_null()) {
+      result.set_is_null(true);
+      return RC::SUCCESS;
+    }
     return DataType::type_instance(result.attr_type())->divide(left, right, result);
   }
 
   static RC negative(const Value &value, Value &result)
   {
+    // NULL 运算
+    if (value.is_null()) {
+      result.set_is_null(true);
+      return RC::SUCCESS;
+    }
     return DataType::type_instance(result.attr_type())->negative(value, result);
   }
 
   static RC cast_to(const Value &value, AttrType to_type, Value &result)
   {
+    // NULL 可以转型到任意类型
+    // 但构造出的 NULL 是未定义类型，需要转型到正确类型
+    if (value.is_null()) {
+      result.set_type(to_type);
+      result.set_is_null(true);
+      return RC::SUCCESS;
+    }
     return DataType::type_instance(value.attr_type())->cast_to(value, to_type, result);
   }
 
@@ -97,6 +131,7 @@ public:
   void set_boolean(bool val);
   void set_date(const char *s);  // 从 "YYYY-MM-DD" 格式的日期字符串创建 Value
   void set_date(int val);        // 从 YYYYMMDD 格式的整数创建 Value
+  void set_is_null(bool is_null);  // NULL
 
   string to_string() const;
 
@@ -106,6 +141,7 @@ public:
 
   int      length() const { return length_; }
   AttrType attr_type() const { return attr_type_; }
+  bool is_null() const { return is_null_; }
   
   bool is_date_valid() const;
 
@@ -130,6 +166,7 @@ public:
 private:
   AttrType attr_type_ = AttrType::UNDEFINED;
   int      length_    = 0;
+  bool     is_null_   = false;
 
   union Val
   {
