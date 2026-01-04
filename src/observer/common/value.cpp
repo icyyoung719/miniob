@@ -282,9 +282,8 @@ void Value::set_value(const Value &value)
 
 void Value::set_string_from_other(const Value &other)
 {
-  reset();
   ASSERT(attr_type_ == AttrType::CHARS, "attr type is not CHARS");
-  if (own_data_ && other.value_.pointer_value_ != nullptr && length_ != 0) {
+  if (own_data_ && other.value_.pointer_value_ != nullptr) {
     this->value_.pointer_value_ = new char[this->length_ + 1];
     memcpy(this->value_.pointer_value_, other.value_.pointer_value_, this->length_);
     this->value_.pointer_value_[this->length_] = '\0';
@@ -323,10 +322,10 @@ string Value::to_string() const
   return res;
 }
 
-int Value::compare(const Value &other) const {
-  // ???
+int Value::compare(const Value &other) const
+{
   if (is_null_ || other.is_null_) {
-    return INT32_MAX;  // 表示未实现的比较
+    return INT32_MAX;  // 空值参与比较，返回 false
   }
 
   return DataType::type_instance(this->attr_type_)->compare(*this, other); 
@@ -395,6 +394,8 @@ string Value::get_string() const { return this->to_string(); }
 
 string_t Value::get_string_t() const
 {
+  // debug
+  printf("is b\n");
   ASSERT(attr_type_ == AttrType::CHARS, "attr type is not CHARS");
   return string_t(value_.pointer_value_, length_);
 }

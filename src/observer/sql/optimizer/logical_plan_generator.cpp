@@ -176,6 +176,20 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
       cmp_exprs.emplace_back(new IsExpr(filter_unit->comp(), std::move(left), std::move(right)));
     } else {
       // 否则，执行原有的类型转换逻辑，并创建 ComparisonExpr 对象
+      if ((left->type() == ExprType::VALUE && ((ValueExpr*)left.get())->get_value().is_null()) ||
+          (right->type() == ExprType::VALUE && ((ValueExpr*)right.get())->get_value().is_null())) 
+      {
+        // SQL 语义：任何值与 NULL 进行 =, !=, >, < 等比较，结果都是 UNKNOWN (在 WHERE 子句中视为 FALSE)
+        // 因此，这个比较表达式永远不会为真。我们可以创建一个恒为 FALSE 的表达式。
+        // 目前创造的表达式为 1=0
+        Value val_one(1);
+        Value val_zero(0);
+        unique_ptr<Expression> left_expr(new ValueExpr(val_one));
+        unique_ptr<Expression> right_expr(new ValueExpr(val_zero));
+        cmp_exprs.emplace_back(new ComparisonExpr(CompOp::EQUAL_TO, std::move(left_expr), std::move(right_expr)));
+        // cmp_exprs.emplace_back(new ConstantExpr(Value(AttrType::BOOL, false)));
+        continue; // 跳过当前 filter_unit 的后续处理，直接处理下一个
+      }
       if (left->value_type() != right->value_type()) {
         auto left_to_right_cost = implicit_cast_cost(left->value_type(), right->value_type());
         auto right_to_left_cost = implicit_cast_cost(right->value_type(), left->value_type());
