@@ -58,6 +58,14 @@ RC ExpressionIterator::iterate_child_expr(Expression &expr, function<RC(unique_p
       }
     } break;
 
+    case ExprType::IS_NULL: {
+      auto &is_null_expr = static_cast<IsNullExpr &>(expr);
+      rc = callback(is_null_expr.left());
+      if (OB_SUCC(rc)) {
+        rc = callback(is_null_expr.right());
+      }
+    } break;
+
     case ExprType::AGGREGATION: {
       auto &aggregate_expr = static_cast<AggregateExpr &>(expr);
       rc = callback(aggregate_expr.child());

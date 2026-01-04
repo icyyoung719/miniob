@@ -58,7 +58,7 @@ public:
   Value(Value &&other);
 
   Value &operator=(const Value &other);
-  Value &operator=(Value &&other);
+  Value &operator=(Value &&other) noexcept;
 
   void reset();
 

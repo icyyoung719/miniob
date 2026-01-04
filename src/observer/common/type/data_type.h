@@ -91,7 +91,9 @@ public:
    */
   virtual int cast_cost(AttrType type)
   {
-    if (type == attr_type_) {
+    // 类型未定义的 NULL 转为任意类型的 NULL
+    if (type == attr_type_ || (attr_type_ == AttrType::UNDEFINED && type != AttrType::UNDEFINED)) {
+    // if (type == attr_type_) {
       return 0;
     }
     return INT32_MAX;

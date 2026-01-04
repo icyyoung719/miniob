@@ -120,6 +120,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         NE
         NOT
         NULL_T
+        IS
 
 /** union 中定义各种数据类型，真实生成的代码也是union类型，所以不能有非POD类型的数据 **/
 %union {
@@ -744,12 +745,14 @@ condition:
     ;
 
 comp_op:
-      EQ { $$ = EQUAL_TO; }
-    | LT { $$ = LESS_THAN; }
-    | GT { $$ = GREAT_THAN; }
-    | LE { $$ = LESS_EQUAL; }
-    | GE { $$ = GREAT_EQUAL; }
-    | NE { $$ = NOT_EQUAL; }
+      EQ { $$ = CompOp::EQUAL_TO; }
+    | LT { $$ = CompOp::LESS_THAN; }
+    | GT { $$ = CompOp::GREAT_THAN; }
+    | LE { $$ = CompOp::LESS_EQUAL; }
+    | GE { $$ = CompOp::GREAT_EQUAL; }
+    | NE { $$ = CompOp::NOT_EQUAL; }
+    | IS { $$ = CompOp::IS; }
+    | IS NOT { $$ = CompOp::NOT_IS; }
     ;
 
 // your code here

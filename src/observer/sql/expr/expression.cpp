@@ -151,22 +151,22 @@ RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &re
   }
 
   switch (comp_) {
-    case EQUAL_TO: {
+    case CompOp::EQUAL_TO: {
       result = (0 == cmp_result);
     } break;
-    case LESS_EQUAL: {
+    case CompOp::LESS_EQUAL: {
       result = (cmp_result <= 0);
     } break;
-    case NOT_EQUAL: {
+    case CompOp::NOT_EQUAL: {
       result = (cmp_result != 0);
     } break;
-    case LESS_THAN: {
+    case CompOp::LESS_THAN: {
       result = (cmp_result < 0);
     } break;
-    case GREAT_EQUAL: {
+    case CompOp::GREAT_EQUAL: {
       result = (cmp_result >= 0);
     } break;
-    case GREAT_THAN: {
+    case CompOp::GREAT_THAN: {
       result = (cmp_result > 0);
     } break;
     default: {
@@ -634,3 +634,33 @@ RC AggregateExpr::type_from_string(const char *type_str, AggregateExpr::Type &ty
   }
   return rc;
 }
+
+IsNullExpr::IsNullExpr(CompOp op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
+    : op_(op), left_(std::move(left)), right_(std::move(right)){};
+ExprType IsNullExpr::type() const { return ExprType::IS_NULL; }
+AttrType IsNullExpr::value_type() const { return AttrType::BOOLEANS; }
+int      IsNullExpr::value_length() const { return sizeof(bool); }
+RC       IsNullExpr::get_value(const Tuple &tuple, Value &value) const
+{
+  ASSERT(right_->type() == ExprType::VALUE, "'is' must be followed by null/not null");
+  auto null_expr  = static_cast<ValueExpr *>(right_.get());
+  auto null_value = null_expr->get_value();
+  ASSERT(null_value.is_null(), "'is' must be followed by null/not null");
+  Value left_value;
+  RC    rc = left_->get_value(tuple, left_value);
+  if (OB_FAIL(rc)) {
+    LOG_WARN("failed to get left value, rc=", strrc(rc));
+    return rc;
+  }
+  bool is = left_value.is_null();
+  if (op_ == CompOp::IS) {
+    value.set_boolean(is);
+  } else if (op_ == CompOp::NOT_IS) {
+    value.set_boolean(!is);
+  } else {
+    ASSERT(false, "IsNullExpr cannot handle CompOp: %d", static_cast<int>(op_));
+  }
+  return RC::SUCCESS;
+}
+std::unique_ptr<Expression> &IsNullExpr::left() { return left_; }
+std::unique_ptr<Expression> &IsNullExpr::right() { return right_; }
