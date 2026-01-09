@@ -572,8 +572,10 @@ select_stmt:        /*  select  语句的语法解析树*/
         delete $2;
       }
 
+      // from
       if ($4 != nullptr) {
         $$->selection.relations.swap(*$4);
+        std::reverse($$->selection.relations.begin(), $$->selection.relations.end());
         delete $4;
       }
 
