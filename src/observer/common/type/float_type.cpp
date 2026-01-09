@@ -53,13 +53,14 @@ RC FloatType::multiply(const Value &left, const Value &right, Value &result) con
 RC FloatType::divide(const Value &left, const Value &right, Value &result) const
 {
   if (right.get_float() > -EPSILON && right.get_float() < EPSILON) {
-    // TODO: set NULL after introducing NULL
-    LOG_WARN("division by zero detected, setting result to 0.0");
-    result.set_float(0.0f);
+    // division by zero detected
+    LOG_WARN("division by zero detected");
+    // return an error so callers (predicates) can treat this as UNKNOWN and skip the row
+    return RC::RANGE_ERROR;
   } else {
     result.set_float(left.get_float() / right.get_float());
+    return RC::SUCCESS;
   }
-  return RC::SUCCESS;
 }
 
 RC FloatType::negative(const Value &val, Value &result) const

@@ -48,6 +48,11 @@ RC PredicatePhysicalOperator::next()
 
     Value value;
     rc = expression_->get_value(*tuple, value);
+    if (rc == RC::RANGE_ERROR) {
+      // division by zero or similar runtime error in predicate -> treat as UNKNOWN -> skip this row
+      LOG_DEBUG("predicate evaluation skipped due to range error (eg. division by zero)");
+      continue;
+    }
     if (rc != RC::SUCCESS) {
       return rc;
     }
