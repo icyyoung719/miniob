@@ -9,10 +9,12 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "common/type/char_type.h"
+#include "common/type/text_type.h"
 #include "common/type/float_type.h"
 #include "common/type/integer_type.h"
 #include "common/type/data_type.h"
 #include "common/type/vector_type.h"
+#include "common/type/date_type.h"
 
 // Todo: 实现新数据类型
 // your code here
@@ -20,8 +22,10 @@ See the Mulan PSL v2 for more details. */
 array<unique_ptr<DataType>, static_cast<int>(AttrType::MAXTYPE)> DataType::type_instances_ = {
     make_unique<DataType>(AttrType::UNDEFINED),
     make_unique<CharType>(),
+    make_unique<TextType>(),
     make_unique<IntegerType>(),
     make_unique<FloatType>(),
     make_unique<VectorType>(),
     make_unique<DataType>(AttrType::BOOLEANS),
+    make_unique<DateType>(),
 };

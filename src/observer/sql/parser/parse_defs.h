@@ -22,6 +22,11 @@ See the Mulan PSL v2 for more details. */
 
 class Expression;
 
+struct OrderByItemSqlNode {
+  unique_ptr<Expression> expr;
+  bool asc = true; // default ascending
+};
+
 /**
  * @defgroup SQLParser SQL Parser
  */
@@ -37,6 +42,16 @@ struct RelAttrSqlNode
 {
   string relation_name;   ///< relation name (may be NULL) 表名
   string attribute_name;  ///< attribute name              属性名
+};
+
+/**
+ * @brief 描述一个relation
+ * @ingroup SQLParser
+ */
+struct RelationSqlNode
+{
+  std::string name;   ///< relation name
+  std::string alias;  ///< 表别名
 };
 
 /**
@@ -64,6 +79,7 @@ enum CompOp
  */
 struct ConditionSqlNode
 {
+  // legacy fields (kept for backward compatibility)
   int left_is_attr;              ///< TRUE if left-hand side is an attribute
                                  ///< 1时，操作符左边是属性名，0时，是属性值
   Value          left_value;     ///< left-hand side value if left_is_attr = FALSE
@@ -73,6 +89,16 @@ struct ConditionSqlNode
                                  ///< 1时，操作符右边是属性名，0时，是属性值
   RelAttrSqlNode right_attr;     ///< right-hand side attribute if right_is_attr = TRUE 右边的属性
   Value          right_value;    ///< right-hand side value if right_is_attr = FALSE
+
+  // new expression-based fields
+  std::unique_ptr<Expression> left_expr;  ///< left-hand side expression
+  std::unique_ptr<Expression> right_expr; ///< right-hand side expression
+};
+
+struct JoinSqlNode
+{
+  RelationSqlNode relation;  ///< Relation to join with
+  std::vector<ConditionSqlNode> conditions;
 };
 
 /**
@@ -89,9 +115,10 @@ struct ConditionSqlNode
 struct SelectSqlNode
 {
   vector<unique_ptr<Expression>> expressions;  ///< 查询的表达式
-  vector<string>                 relations;    ///< 查询的表
+  vector<RelationSqlNode>        relations;    ///< 查询的表
   vector<ConditionSqlNode>       conditions;   ///< 查询条件，使用AND串联起来多个条件
   vector<unique_ptr<Expression>> group_by;     ///< group by clause
+  vector<struct OrderByItemSqlNode> order_by;     ///< order by clause (expr + asc flag)
 };
 
 /**
@@ -111,7 +138,8 @@ struct CalcSqlNode
 struct InsertSqlNode
 {
   string        relation_name;  ///< Relation to insert into
-  vector<Value> values;         ///< 要插入的值
+  // values: list of rows, each row is a vector of Value
+  vector<vector<Value>> values; ///< 要插入的值，支持多行插入
 };
 
 /**
@@ -192,6 +220,7 @@ struct CreateIndexSqlNode
   string index_name;      ///< Index name
   string relation_name;   ///< Relation name
   string attribute_name;  ///< Attribute name
+  bool   is_unique = false; ///< whether the index is UNIQUE
 };
 
 /**

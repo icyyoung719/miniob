@@ -177,7 +177,17 @@ struct DivideOperator
   template <class T>
   static inline T operation(T left, T right)
   {
-    // TODO: `right = 0` is invalid
+    // avoid divide-by-zero in vectorized execution
+    if constexpr (std::is_floating_point<T>::value) {
+      if (right > -EPSILON && right < EPSILON) {
+        return static_cast<T>(0);
+      }
+    } else {
+      // integer types
+      if (right == 0) {
+        return static_cast<T>(0);
+      }
+    }
     return left / right;
   }
 

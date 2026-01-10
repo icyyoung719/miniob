@@ -103,6 +103,45 @@ RC HeapTableEngine::delete_record(const Record &record)
   return rc;
 }
 
+RC HeapTableEngine::insert_record_with_trx(Record &record, Trx *trx)
+{
+  (void)trx;
+  return insert_record(record);
+}
+
+RC HeapTableEngine::delete_record_with_trx(const Record &record, Trx *trx)
+{
+  (void)trx;
+  return delete_record(record);
+}
+
+RC HeapTableEngine::update_record_with_trx(const Record &old_record, const Record &new_record, Trx *trx)
+{
+  (void)trx;
+  // update indexes: delete old entries then insert new entries
+  RC rc = RC::SUCCESS;
+  rc = delete_entry_of_indexes(old_record.data(), old_record.rid(), false /*error_on_not_exists*/);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  rc = insert_entry_of_indexes(new_record.data(), new_record.rid());
+  if (rc != RC::SUCCESS) {
+    // rollback index changes attempt: re-insert old entries
+    (void)insert_entry_of_indexes(old_record.data(), old_record.rid());
+    return rc;
+  }
+
+  // update the record data in-place using visit_record helper
+  rc = record_handler_->visit_record(old_record.rid(), [&](Record &record) {
+    RC rc2 = record.copy_data(new_record.data(), new_record.len());
+    if (rc2 != RC::SUCCESS) {
+      return false;
+    }
+    return true;
+  });
+  return rc;
+}
+
 RC HeapTableEngine::get_record_scanner(RecordScanner *&scanner, Trx *trx, ReadWriteMode mode)
 {
   scanner = new HeapRecordScanner(table_, *data_buffer_pool_, trx, db_->log_handler(), mode, nullptr);
@@ -122,7 +161,7 @@ RC HeapTableEngine::get_chunk_scanner(ChunkFileScanner &scanner, Trx *trx, ReadW
   return rc;
 }
 
-RC HeapTableEngine::create_index(Trx *trx, const FieldMeta *field_meta, const char *index_name)
+RC HeapTableEngine::create_index(Trx *trx, const FieldMeta *field_meta, const char *index_name, bool is_unique)
 {
   if (common::is_blank(index_name) || nullptr == field_meta) {
     LOG_INFO("Invalid input arguments, table name is %s, index_name is blank or attribute_name is blank", table_meta_->name());
@@ -131,7 +170,7 @@ RC HeapTableEngine::create_index(Trx *trx, const FieldMeta *field_meta, const ch
 
   IndexMeta new_index_meta;
 
-  RC rc = new_index_meta.init(index_name, *field_meta);
+  RC rc = new_index_meta.init(index_name, *field_meta, is_unique);
   if (rc != RC::SUCCESS) {
     LOG_INFO("Failed to init IndexMeta in table:%s, index_name:%s, field_name:%s", 
              table_meta_->name(), index_name, field_meta->name());

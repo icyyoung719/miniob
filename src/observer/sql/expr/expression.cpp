@@ -234,6 +234,14 @@ RC ComparisonExpr::eval(Chunk &chunk, vector<uint8_t> &select)
     LOG_WARN("failed to get value of right expression. rc=%s", strrc(rc));
     return rc;
   }
+  LOG_INFO("ComparisonExpr::eval left.attr_type=%d right.attr_type=%d left_col_type=%d right_col_type=%d left_count=%d right_count=%d",
+           static_cast<int>(left_column.attr_type()), static_cast<int>(right_column.attr_type()),
+           static_cast<int>(left_column.column_type()), static_cast<int>(right_column.column_type()),
+           left_column.count(), right_column.count());
+    fprintf(stderr, "[DEBUG] ComparisonExpr::eval left.attr_type=%d right.attr_type=%d left_col_type=%d right_col_type=%d left_count=%d right_count=%d\n",
+      static_cast<int>(left_column.attr_type()), static_cast<int>(right_column.attr_type()),
+      static_cast<int>(left_column.column_type()), static_cast<int>(right_column.column_type()),
+      left_column.count(), right_column.count());
   if (left_column.attr_type() != right_column.attr_type()) {
     LOG_WARN("cannot compare columns with different types");
     return RC::INTERNAL;
@@ -364,23 +372,23 @@ RC ArithmeticExpr::calc_value(const Value &left_value, const Value &right_value,
 
   switch (arithmetic_type_) {
     case Type::ADD: {
-      Value::add(left_value, right_value, value);
+      rc = Value::add(left_value, right_value, value);
     } break;
 
     case Type::SUB: {
-      Value::subtract(left_value, right_value, value);
+      rc = Value::subtract(left_value, right_value, value);
     } break;
 
     case Type::MUL: {
-      Value::multiply(left_value, right_value, value);
+      rc = Value::multiply(left_value, right_value, value);
     } break;
 
     case Type::DIV: {
-      Value::divide(left_value, right_value, value);
+      rc = Value::divide(left_value, right_value, value);
     } break;
 
     case Type::NEGATIVE: {
-      Value::negative(left_value, value);
+      rc = Value::negative(left_value, value);
     } break;
 
     default: {
@@ -471,11 +479,16 @@ RC ArithmeticExpr::get_value(const Tuple &tuple, Value &value) const
     LOG_WARN("failed to get value of left expression. rc=%s", strrc(rc));
     return rc;
   }
-  rc = right_->get_value(tuple, right_value);
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to get value of right expression. rc=%s", strrc(rc));
-    return rc;
+  if (right_) {
+    rc = right_->get_value(tuple, right_value);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of right expression. rc=%s", strrc(rc));
+      return rc;
+    }
+    return calc_value(left_value, right_value, value);
   }
+
+  // unary expression (NEGATIVE)
   return calc_value(left_value, right_value, value);
 }
 
@@ -487,18 +500,37 @@ RC ArithmeticExpr::get_column(Chunk &chunk, Column &column)
     return rc;
   }
   Column left_column;
-  Column right_column;
-
   rc = left_->get_column(chunk, left_column);
   if (rc != RC::SUCCESS) {
     LOG_WARN("failed to get column of left expression. rc=%s", strrc(rc));
     return rc;
   }
-  rc = right_->get_column(chunk, right_column);
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to get column of right expression. rc=%s", strrc(rc));
-    return rc;
+
+  if (right_) {
+    Column right_column;
+    rc = right_->get_column(chunk, right_column);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get column of right expression. rc=%s", strrc(rc));
+      return rc;
+    }
+    LOG_INFO("ArithmeticExpr::get_column left.attr_type=%d right.attr_type=%d left_count=%d right_count=%d left_col_type=%d right_col_type=%d",
+             static_cast<int>(left_column.attr_type()), static_cast<int>(right_column.attr_type()),
+             left_column.count(), right_column.count(),
+             static_cast<int>(left_column.column_type()), static_cast<int>(right_column.column_type()));
+    fprintf(stderr, "[DEBUG] ArithmeticExpr::get_column left.attr_type=%d right.attr_type=%d left_count=%d right_count=%d left_col_type=%d right_col_type=%d\n",
+            static_cast<int>(left_column.attr_type()), static_cast<int>(right_column.attr_type()),
+            left_column.count(), right_column.count(),
+            static_cast<int>(left_column.column_type()), static_cast<int>(right_column.column_type()));
+    return calc_column(left_column, right_column, column);
   }
+
+  // unary expression (NEGATIVE)
+  LOG_INFO("ArithmeticExpr::get_column unary left.attr_type=%d left_count=%d left_col_type=%d",
+           static_cast<int>(left_column.attr_type()), left_column.count(), static_cast<int>(left_column.column_type()));
+  fprintf(stderr, "[DEBUG] ArithmeticExpr::get_column unary left.attr_type=%d left_count=%d left_col_type=%d\n",
+          static_cast<int>(left_column.attr_type()), left_column.count(), static_cast<int>(left_column.column_type()));
+  // create a dummy right column with zero count
+  Column right_column;
   return calc_column(left_column, right_column, column);
 }
 
@@ -507,7 +539,13 @@ RC ArithmeticExpr::calc_column(const Column &left_column, const Column &right_co
   RC rc = RC::SUCCESS;
 
   const AttrType target_type = value_type();
-  column.init(target_type, left_column.attr_len(), max(left_column.count(), right_column.count()));
+    column.init(target_type, left_column.attr_len(), max(left_column.count(), right_column.count()));
+    LOG_INFO("ArithmeticExpr::calc_column target_type=%d left_attr=%d right_attr=%d left_count=%d right_count=%d",
+             static_cast<int>(target_type), static_cast<int>(left_column.attr_type()), static_cast<int>(right_column.attr_type()),
+             left_column.count(), right_column.count());
+      fprintf(stderr, "[DEBUG] ArithmeticExpr::calc_column target_type=%d left_attr=%d right_attr=%d left_count=%d right_count=%d\n",
+        static_cast<int>(target_type), static_cast<int>(left_column.attr_type()), static_cast<int>(right_column.attr_type()),
+        left_column.count(), right_column.count());
   bool left_const  = left_column.column_type() == Column::Type::CONSTANT_COLUMN;
   bool right_const = right_column.column_type() == Column::Type::CONSTANT_COLUMN;
   if (left_const && right_const) {
@@ -595,6 +633,22 @@ unique_ptr<Aggregator> AggregateExpr::create_aggregator() const
   switch (aggregate_type_) {
     case Type::SUM: {
       aggregator = make_unique<SumAggregator>();
+      break;
+    }
+    case Type::COUNT: {
+      aggregator = make_unique<CountAggregator>();
+      break;
+    }
+    case Type::AVG: {
+      aggregator = make_unique<AvgAggregator>();
+      break;
+    }
+    case Type::MAX: {
+      aggregator = make_unique<MaxAggregator>();
+      break;
+    }
+    case Type::MIN: {
+      aggregator = make_unique<MinAggregator>();
       break;
     }
     default: {

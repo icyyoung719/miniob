@@ -96,7 +96,53 @@ RC Table::create(Db *db, int32_t table_id, const char *path, const char *name, c
   table_meta_.serialize(fs);
   fs.close();
 
+  // create lob file handler if table contains TEXT fields
+  bool has_lob = false;
+  for (int i = 0; i < table_meta_.field_num(); i++) {
+    const FieldMeta *f = table_meta_.field(i);
+    if (f->type() == AttrType::TEXTS) {
+      has_lob = true;
+      break;
+    }
+  }
+
+  if (has_lob) {
+    LobFileHandler tmp_lob;
+    string lob_file = table_lob_file(base_dir, name);
+    rc = tmp_lob.create_file(lob_file.c_str());
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("Failed to create lob file %s for table %s, rc=%d", lob_file.c_str(), name, rc);
+      return rc;
+    }
+  }
+
   db_       = db;
+
+  // open or create lob file if table contains TEXT fields
+  {
+    bool has_lob = false;
+    for (int i = 0; i < table_meta_.field_num(); i++) {
+      const FieldMeta *f = table_meta_.field(i);
+      if (f->type() == AttrType::TEXTS) {
+        has_lob = true;
+        break;
+      }
+    }
+    if (has_lob) {
+      lob_handler_ = new LobFileHandler();
+      string lob_file = table_lob_file(base_dir, table_meta_.name());
+      RC rc2 = lob_handler_->open_file(lob_file.c_str());
+      if (rc2 == RC::FILE_NOT_EXIST) {
+        rc2 = lob_handler_->create_file(lob_file.c_str());
+      }
+      if (rc2 != RC::SUCCESS) {
+        LOG_ERROR("Failed to open/create lob file %s for table %s, rc=%d", lob_file.c_str(), table_meta_.name(), rc2);
+        delete lob_handler_;
+        lob_handler_ = nullptr;
+        return rc2;
+      }
+    }
+  }
 
   string             data_file = table_data_file(base_dir, name);
   BufferPoolManager &bpm       = db->buffer_pool_manager();
@@ -143,6 +189,33 @@ RC Table::open(Db *db, const char *meta_file, const char *base_dir)
   fs.close();
 
   db_       = db;
+
+  // 打开或创建 LOB 文件（仅当表中包含 TEXT 字段时）
+  {
+    bool has_lob = false;
+    for (int i = 0; i < table_meta_.field_num(); i++) {
+      const FieldMeta *f = table_meta_.field(i);
+      if (f->type() == AttrType::TEXTS) {
+        has_lob = true;
+        break;
+      }
+    }
+
+    if (has_lob) {
+      lob_handler_ = new LobFileHandler();
+      string lob_file = table_lob_file(base_dir, table_meta_.name());
+      RC rc2 = lob_handler_->open_file(lob_file.c_str());
+      if (rc2 == RC::FILE_NOT_EXIST) {
+        rc2 = lob_handler_->create_file(lob_file.c_str());
+      }
+      if (rc2 != RC::SUCCESS) {
+        LOG_ERROR("Failed to open/create lob file %s for table %s, rc=%d", lob_file.c_str(), table_meta_.name(), rc2);
+        delete lob_handler_;
+        lob_handler_ = nullptr;
+        return rc2;
+      }
+    }
+  }
 
   // // 加载数据文件
   // RC rc = init_record_handler(base_dir);
@@ -229,14 +302,18 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
     const FieldMeta *field = table_meta_.field(i + normal_field_start_index);
     const Value &    value = values[i];
     if (field->type() != value.attr_type()) {
-      Value real_value;
-      rc = Value::cast_to(value, field->type(), real_value);
-      if (OB_FAIL(rc)) {
-        LOG_WARN("failed to cast value. table name:%s,field name:%s,value:%s ",
-            table_meta_.name(), field->name(), value.to_string().c_str());
-        break;
+      if (field->type() == AttrType::TEXTS && value.attr_type() == AttrType::CHARS) {
+        rc = set_value_to_record(record_data, value, field);
+      } else {
+        Value real_value;
+        rc = Value::cast_to(value, field->type(), real_value);
+        if (OB_FAIL(rc)) {
+          LOG_WARN("failed to cast value. table name:%s,field name:%s,value:%s ",
+              table_meta_.name(), field->name(), value.to_string().c_str());
+          break;
+        }
+        rc = set_value_to_record(record_data, real_value, field);
       }
-      rc = set_value_to_record(record_data, real_value, field);
     } else {
       rc = set_value_to_record(record_data, value, field);
     }
@@ -253,15 +330,34 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
 
 RC Table::set_value_to_record(char *record_data, const Value &value, const FieldMeta *field)
 {
-  size_t       copy_len = field->len();
-  const size_t data_len = value.length();
   if (field->type() == AttrType::CHARS) {
+    size_t copy_len = field->len();
+    const size_t data_len = value.length();
     if (copy_len > data_len) {
       copy_len = data_len + 1;
     }
+    memcpy(record_data + field->offset(), value.data(), copy_len);
+    return RC::SUCCESS;
+  } else if (field->type() == AttrType::TEXTS) {
+    if (lob_handler_ == nullptr) {
+      LOG_ERROR("lob handler is null while inserting TEXT field");
+      return RC::INTERNAL;
+    }
+    int64_t offset = 0;
+    int64_t len = (int64_t)value.length();
+    RC rc = lob_handler_->insert_data(offset, len, value.data());
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("failed to insert lob data for table %s, field %s", table_meta_.name(), field->name());
+      return rc;
+    }
+    memcpy(record_data + field->offset(), &offset, sizeof(offset));
+    memcpy(record_data + field->offset() + sizeof(offset), &len, sizeof(len));
+    return RC::SUCCESS;
+  } else {
+    size_t copy_len = field->len();
+    memcpy(record_data + field->offset(), value.data(), copy_len);
+    return RC::SUCCESS;
   }
-  memcpy(record_data + field->offset(), value.data(), copy_len);
-  return RC::SUCCESS;
 }
 
 RC Table::get_record_scanner(RecordScanner *&scanner, Trx *trx, ReadWriteMode mode)
@@ -274,9 +370,9 @@ RC Table::get_chunk_scanner(ChunkFileScanner &scanner, Trx *trx, ReadWriteMode m
   return engine_->get_chunk_scanner(scanner, trx, mode);
 }
 
-RC Table::create_index(Trx *trx, const FieldMeta *field_meta, const char *index_name)
+RC Table::create_index(Trx *trx, const FieldMeta *field_meta, const char *index_name, bool is_unique)
 {
-  return engine_->create_index(trx, field_meta, index_name);
+  return engine_->create_index(trx, field_meta, index_name, is_unique);
 }
 
 RC Table::delete_record(const Record &record)

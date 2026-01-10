@@ -44,7 +44,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
   vector<Table *>                tables;
   unordered_map<string, Table *> table_map;
   for (size_t i = 0; i < select_sql.relations.size(); i++) {
-    const char *table_name = select_sql.relations[i].c_str();
+    const char *table_name = select_sql.relations[i].name.c_str();
     if (nullptr == table_name) {
       LOG_WARN("invalid argument. relation name is null. index=%d", i);
       return RC::INVALID_ARGUMENT;
@@ -81,6 +81,24 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
       return rc;
     }
   }
+  
+  vector<SelectStmt::OrderByItem> order_by_items;
+  for (auto &item : select_sql.order_by) {
+    vector<unique_ptr<Expression>> tmp;
+    RC rc = expression_binder.bind_expression(item.expr, tmp);
+    if (OB_FAIL(rc)) {
+      LOG_INFO("bind expression failed. rc=%s", strrc(rc));
+      return rc;
+    }
+    if (tmp.empty()) {
+      LOG_WARN("bound order by expression empty");
+      return RC::INTERNAL;
+    }
+    SelectStmt::OrderByItem nb;
+    nb.expr = std::move(tmp[0]);
+    nb.asc = item.asc;
+    order_by_items.push_back(std::move(nb));
+  }
 
   Table *default_table = nullptr;
   if (tables.size() == 1) {
@@ -107,6 +125,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
   select_stmt->query_expressions_.swap(bound_expressions);
   select_stmt->filter_stmt_ = filter_stmt;
   select_stmt->group_by_.swap(group_by_expressions);
+  select_stmt->order_by_.swap(order_by_items);
   stmt                      = select_stmt;
   return RC::SUCCESS;
 }

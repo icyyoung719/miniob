@@ -34,12 +34,12 @@ class IndexMeta
 {
 public:
   IndexMeta() = default;
-
-  RC init(const char *name, const FieldMeta &field);
+  RC init(const char *name, const FieldMeta &field, bool is_unique = false);
 
 public:
   const char *name() const;
   const char *field() const;
+  bool        is_unique() const;
 
   void desc(ostream &os) const;
 
@@ -50,4 +50,5 @@ public:
 protected:
   string name_;   // index's name
   string field_;  // field's name
+  bool   unique_ = false; // whether this index enforces uniqueness
 };

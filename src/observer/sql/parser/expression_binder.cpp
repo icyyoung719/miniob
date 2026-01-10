@@ -186,6 +186,10 @@ RC ExpressionBinder::bind_field_expression(
 RC ExpressionBinder::bind_value_expression(
     unique_ptr<Expression> &value_expr, vector<unique_ptr<Expression>> &bound_expressions)
 {
+  // 在这里检查日期是否合法，对应.y中返回的非法DATES
+  if (value_expr->value_type() == AttrType::UNDEFINED) {
+    return RC::VARIABLE_NOT_VALID;
+  }
   bound_expressions.emplace_back(std::move(value_expr));
   return RC::SUCCESS;
 }
@@ -325,7 +329,7 @@ RC ExpressionBinder::bind_arithmetic_expression(
   }
 
   if (child_bound_expressions.size() != 1) {
-    LOG_WARN("invalid left children number of comparison expression: %d", child_bound_expressions.size());
+    LOG_WARN("invalid left children number of arithmetic expression: %d", child_bound_expressions.size());
     return RC::INVALID_ARGUMENT;
   }
 
@@ -334,20 +338,23 @@ RC ExpressionBinder::bind_arithmetic_expression(
     left_expr.reset(left.release());
   }
 
-  child_bound_expressions.clear();
-  rc = bind_expression(right_expr, child_bound_expressions);
-  if (OB_FAIL(rc)) {
-    return rc;
-  }
+  // right child may be null for unary NEGATIVE expressions
+  if (right_expr != nullptr) {
+    child_bound_expressions.clear();
+    rc = bind_expression(right_expr, child_bound_expressions);
+    if (OB_FAIL(rc)) {
+      return rc;
+    }
 
-  if (child_bound_expressions.size() != 1) {
-    LOG_WARN("invalid right children number of comparison expression: %d", child_bound_expressions.size());
-    return RC::INVALID_ARGUMENT;
-  }
+    if (child_bound_expressions.size() != 1) {
+      LOG_WARN("invalid right children number of arithmetic expression: %d", child_bound_expressions.size());
+      return RC::INVALID_ARGUMENT;
+    }
 
-  unique_ptr<Expression> &right = child_bound_expressions[0];
-  if (right.get() != right_expr.get()) {
-    right_expr.reset(right.release());
+    unique_ptr<Expression> &right = child_bound_expressions[0];
+    if (right.get() != right_expr.get()) {
+      right_expr.reset(right.release());
+    }
   }
 
   bound_expressions.emplace_back(std::move(expr));
@@ -417,6 +424,10 @@ RC ExpressionBinder::bind_aggregate_expression(
 
   unique_ptr<Expression>        &child_expr = unbound_aggregate_expr->child();
   vector<unique_ptr<Expression>> child_bound_expressions;
+  if (child_expr == nullptr) {
+    LOG_WARN("aggregate function '%s' missing argument", aggregate_name);
+    return RC::INVALID_ARGUMENT;
+  }
 
   if (child_expr->type() == ExprType::STAR && aggregate_type == AggregateExpr::Type::COUNT) {
     ValueExpr *value_expr = new ValueExpr(Value(1));
@@ -436,6 +447,11 @@ RC ExpressionBinder::bind_aggregate_expression(
       child_expr.reset(child_bound_expressions[0].release());
     }
   }
+
+    if (child_expr->type() == ExprType::CONJUNCTION) {
+      LOG_WARN("aggregate function '%s' has multiple arguments", aggregate_name);
+      return RC::INVALID_ARGUMENT;
+    }
 
   auto aggregate_expr = make_unique<AggregateExpr>(aggregate_type, std::move(child_expr));
   aggregate_expr->set_name(unbound_aggregate_expr->name());
