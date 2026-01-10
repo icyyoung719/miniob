@@ -120,6 +120,10 @@ RC IndexScanPhysicalOperator::filter(RowTuple &tuple, bool &result)
   Value value;
   for (unique_ptr<Expression> &expr : predicates_) {
     rc = expr->get_value(tuple, value);
+    if (rc == RC::RANGE_ERROR) {
+      result = false;
+      return RC::SUCCESS;
+    }
     if (rc != RC::SUCCESS) {
       return rc;
     }
